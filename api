@@ -1,0 +1,552 @@
+#!/usr/local/bin/perl
+
+use strict;
+use English;
+use v5.14;
+use Data::UUID;
+
+#-----------------------------
+my $version = "0.99.4";
+my $i;
+my $action = "null";
+my $snapsource = "null";
+my $snapsourcefmt;
+my $snapname = "null";
+my $victim = "null";
+my $clonesource = "null";
+my $clonesourcefmt;
+my $clonename = "null";
+my $clonenamefmt;
+my $victim = "null";
+my $victimfmt;
+my $targetname = "null";
+my $device = "null";
+my $lun = "null";
+my $spell;
+my $errormessage;
+my @request;
+my @tmp;
+my @time;
+my $logpath;
+my $result;
+my @logcontents;
+my $line;
+# paths
+my $ctlconfpath = "/tmp/ctl.conf";
+my $sudopath = "/usr/local/bin/sudo";
+my $tmppath = "/tmp";
+#-----------------------------
+
+print STDOUT "Content-Type: text/xml;\n";
+print STDOUT "\n";
+
+sub getxmlhead(){
+    print STDOUT "<?xml version=\"1.0\"?>\n";
+    print STDOUT "<response>\n";
+};
+
+sub getxmlfoot(){
+    print STDOUT "</response>\n";
+};
+
+sub dumpall() {
+    $i = 0;
+    foreach $i(keys(%ENV)) {
+	print STDOUT "<env>", $i, ": ", $ENV{$i}, "</env>\n";
+    }
+}
+
+
+# parsing REQUEST_URI
+@request = split(/[\?\&]/, $ENV{'REQUEST_URI'});
+$i = 0;
+while ($i < @request) {
+    chomp($request[$i]);
+    if ($request[$i] =~ "action") {
+	@tmp = split(/=/, $request[$i]);
+	if (defined($tmp[1])) {
+	    $action = $tmp[1];
+	} else {
+	    $action = "null";
+	}
+    }
+    if ($request[$i] =~ "snapsource") {
+	@tmp = split(/=/, $request[$i]);
+	if (defined($tmp[1])) {
+	    $snapsource = $tmp[1];
+	} else {
+	    $snapsource = "null";
+	}
+    }
+    if ($request[$i] =~ "snapname") {
+	@tmp = split(/=/, $request[$i]);
+	if (defined($tmp[1])) {
+	    $snapname = $tmp[1];
+	} else {
+	    $snapname = "null";
+	}
+    }
+    if ($request[$i] =~ "victim") {
+	@tmp = split(/=/, $request[$i]);
+	if (defined($tmp[1])) {
+	    $victim = $tmp[1];
+	} else {
+	    $victim = "null";
+	}
+    }
+    if ($request[$i] =~ "clonesource") {
+	@tmp = split(/=/, $request[$i]);
+	if (defined($tmp[1])) {
+	    $clonesource = $tmp[1];
+	} else {
+	    $clonesource = "null";
+	}
+    }
+    if ($request[$i] =~ "clonename") {
+	@tmp = split(/=/, $request[$i]);
+	if (defined($tmp[1])) {
+	    $clonename = $tmp[1];
+	} else {
+	    $clonename = "null";
+	}
+    }
+    if ($request[$i] =~ "targetname") {
+	@tmp = split(/=/, $request[$i]);
+	if (defined($tmp[1])) {
+	    $targetname = $tmp[1];
+	} else {
+	    $targetname = "null";
+	}
+    }
+    if ($request[$i] =~ "device") {
+	@tmp = split(/=/, $request[$i]);
+	if (defined($tmp[1])) {
+	    $device = $tmp[1];
+	} else {
+	    $device = "null";
+	}
+    }
+    if ($request[$i] =~ "lun") {
+	@tmp = split(/=/, $request[$i]);
+	if (defined($tmp[1])) {
+	    $lun = $tmp[1];
+	} else {
+	    $lun = "null";
+	}
+    }
+    $i++;
+}
+
+sub parselog() {
+    my $openlogresult;
+
+    $openlogresult = open(LOG, "<", $logpath);
+    if ($openlogresult) {
+	undef(@logcontents);
+	while (!eof(LOG)) {
+	    $line = readline(LOG);
+	    chomp($line);
+	    push @logcontents, $line;
+	}
+	close(LOG);
+    } else {
+    }
+}
+
+sub getsnapshot() {
+    #($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst)
+    @time = localtime(time());
+    $time[4]++;
+    $time[5] += 1900;
+    if (defined($snapsource) && defined($snapname)) {
+	$snapsourcefmt = $snapsource;
+	$snapsourcefmt =~ s/\//_/g;
+	$logpath = $tmppath."/snapshot-".$snapsourcefmt."-".$snapname."-".$time[5]."-".$time[4]."-".$time[3]."-".$time[2]."-".$time[1]."-".$time[0].".log";
+	$spell = $sudopath." /sbin/zfs snapshot ".$snapsource."@".$snapname." >".$logpath." 2>&1";
+	system($spell);
+	parselog();
+	if (@logcontents > 0) {
+	    return 0;
+	} else {
+	    $errormessage = "log file not empty.";
+	    return 1;
+	}
+    } else {
+	$errormessage = "missing snapshot source or snapshot name.";
+	return 1;
+    }
+}
+
+sub getclone() {
+    #($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst)
+    @time = localtime(time());
+    $time[4]++;
+    $time[5] += 1900;
+    if (defined($snapsource) && defined($snapname)) {
+	$clonesourcefmt = $clonesource;
+	$clonesourcefmt =~ s/\//_/g;
+	$clonenamefmt =~ s/\//_/g;
+	$logpath = $tmppath."/clone-".$clonesourcefmt."-".$clonenamefmt."-".$time[5]."-".$time[4]."-".$time[3]."-".$time[2]."-".$time[1]."-".$time[0].".log";
+	$spell = $sudopath." /sbin/zfs clone ".$clonesource." ".$clonename." >".$logpath." 2>&1";
+	system($spell);
+	parselog();
+	if (@logcontents > 0) {
+	    return 0;
+	} else {
+	    $errormessage = "log file not empty.";
+	    return 1;
+	}
+    } else {
+	$errormessage = "missing snapshot source or snapshot name.";
+	return 1;
+    }
+}
+
+sub getstatus() {
+    #($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst)
+    @time = localtime(time());
+    $time[4]++;
+    $time[5] += 1900;
+    $logpath = $tmppath."/status-".$time[5]."-".$time[4]."-".$time[3]."-".$time[2]."-".$time[1]."-".$time[0].".log";
+    $spell = $sudopath." /sbin/zfs list -t all >".$logpath." 2>&1";
+    system($spell);
+    parselog();
+    return 0;
+}
+
+sub destroyentity() {
+    #($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst)
+    @time = localtime(time());
+    $time[4]++;
+    $time[5] += 1900;
+    if (defined($victim)) {
+	$victimfmt = $clonesource;
+	$victimfmt =~ s/\//_/g;
+	$logpath = $tmppath."/destroy-".$victimfmt."-".$time[5]."-".$time[4]."-".$time[3]."-".$time[2]."-".$time[1]."-".$time[0].".log";
+	$spell = $sudopath." /sbin/zfs destroy ".$victim." >".$logpath." 2>&1";
+	system($spell);
+	parselog();
+	if (@logcontents > 0) {
+	    $errormessage = "log file not empty.";
+	    return 1;
+	} else {
+	    #$errormessage = "log file not empty.";
+	    return 0;
+	}
+    } else {
+	$errormessage = "missing entity name to destroy.";
+	return 1;
+    }
+}
+
+sub enabletarget() {
+    my $uuid;
+    my $ug;
+    my $ctlconfpath;
+    my $line;
+    my $bracketcount = 0;
+    my $targetfound = 0;
+
+    if (defined($targetname)) {
+	$ug = Data::UUID -> new;
+	$uuid = $ug -> create_str();
+	$ctlconfpath = "/tmp/ctl.conf.".$uuid;
+	$spell = $sudopath." /bin/cp /etc/ctl.conf ".$ctlconfpath;
+	system($spell);
+	$spell = $sudopath." /bin/chmod 644 ".$ctlconfpath;
+	system($spell);
+	open(CTLCONF, "<", $ctlconfpath) or return 1;
+	open(CTLCONFNEW, ">", $ctlconfpath.".new") or return 1;
+	while (!eof(CTLCONF)) {
+	    $line = readline(*CTLCONF);
+	    chomp($line);
+	    if ($line =~ /^[\s\t]*\#target $targetname/) {
+		$bracketcount++;
+		$targetfound = 1;
+		$line = substr($line, 1)
+	    } else {
+		if ($line =~ /^[\s\t]*target $targetname/) {
+		    $errormessage = "already enabled";
+		}
+		if ($bracketcount > 0) {
+		    if ($line =~ /.*\}/) {
+			$bracketcount--;
+		    }
+		    if ($line =~ /.*\{/) {
+			$bracketcount++;
+		    }
+		    $line = substr($line, 1)
+		}
+	    }
+	    print CTLCONFNEW $line, "\n";
+	}
+	close(CTLCONF);
+	close(CTLCONFNEW);
+	$spell = $sudopath." /bin/chmod 600 ".$ctlconfpath.".new";
+	system($spell);
+	$spell = $sudopath." /bin/mv ".$ctlconfpath.".new /etc/ctl.conf";
+	system($spell);
+	$spell = $sudopath." /usr/sbin/service ctld reload";
+	system($spell);
+	print STDOUT "<debug>returning 0</debug>\n";
+	if ($targetfound > 0) {
+	    return 0;
+	} else {
+	    return 1;
+	}
+    } else {
+	return 1;
+    }
+}
+
+sub disabletarget() {
+    my $uuid;
+    my $ug;
+    my $ctlconfpath;
+    my $line;
+    my $bracketcount = 0;
+    my $targetfound = 0;
+
+    if (defined($targetname)) {
+	$ug = Data::UUID -> new;
+	$uuid = $ug -> create_str();
+	$ctlconfpath = "/tmp/ctl.conf.".$uuid;
+	$spell = $sudopath." /bin/cp /etc/ctl.conf ".$ctlconfpath;
+	system($spell);
+	$spell = $sudopath." /bin/chmod 644 ".$ctlconfpath;
+	system($spell);
+	open(CTLCONF, "<", $ctlconfpath) or return 1;
+	open(CTLCONFNEW, ">", $ctlconfpath.".new") or return 1;
+	while (!eof(CTLCONF)) {
+	    $line = readline(*CTLCONF);
+	    chomp($line);
+	    if ($line =~ /^[\s\t]*target $targetname/) {
+		$bracketcount++;
+		$targetfound = 1;
+		#print STDOUT "<debug>BRACKETCOUNT UP: ".$bracketcount."</debug>\n";
+		#print STDOUT "<debug># ".$line."</debug>\n";
+		print CTLCONFNEW "#", $line, "\n";
+	    } else {
+		if ($line =~ /^\#[\s\t]*target $targetname/) {
+		    $errormessage = "already disabled";
+		}
+		if ($bracketcount > 0) {
+		    if ($line =~ /.*\}/) {
+			$bracketcount--;
+			#print STDOUT "<debug>BRACKETCOUNT DOWN: ".$bracketcount."</debug>\n";
+		    }
+		    if ($line =~ /.*\{/) {
+			$bracketcount++;
+			#print STDOUT "<debug>BRACKETCOUNT UP: ".$bracketcount."</debug>\n";
+		    }
+		    #print STDOUT "<debug># ".$line."</debug>\n";
+		    print CTLCONFNEW "#", $line, "\n";
+		} else {
+		    #print STDOUT "<debug>NOMOD ".$line."</debug>\n";
+		    print CTLCONFNEW $line, "\n";
+		}
+	    }
+	}
+	close(CTLCONF);
+	close(CTLCONFNEW);
+	$spell = $sudopath." /bin/chmod 600 ".$ctlconfpath.".new";
+	system($spell);
+	$spell = $sudopath." /bin/mv ".$ctlconfpath.".new /etc/ctl.conf";
+	system($spell);
+	$spell = $sudopath." /usr/sbin/service ctld reload";
+	system($spell);
+	if ($targetfound > 0) {
+	    print STDOUT "<debug>returning 0</debug>\n";
+	    return 0;
+	} else {
+	    $errormessage = "target not found";
+	    return 1;
+	}
+    } else {
+	return 1;
+    }
+}
+
+sub mounttarget() {
+    my $uuid;
+    my $ug;
+    my $ctlconfpath;
+    my $line;
+    my $bracketcount = 0;
+    my $targetfound = 0;
+    my $lunfound = 0;
+    my $targetmodified = 0;
+
+    if (defined($targetname) && defined($device)) {
+	$ug = Data::UUID -> new;
+	$uuid = $ug -> create_str();
+	$ctlconfpath = "/tmp/ctl.conf.".$uuid;
+	$spell = $sudopath." /bin/cp /etc/ctl.conf ".$ctlconfpath;
+	system($spell);
+	$spell = $sudopath." /bin/chmod 644 ".$ctlconfpath;
+	system($spell);
+	open(CTLCONF, "<", $ctlconfpath) or return 1;
+	open(CTLCONFNEW, ">", $ctlconfpath.".new") or return 1;
+	while (!eof(CTLCONF)) {
+	    $line = readline(*CTLCONF);
+	    chomp($line);
+	    if ($line =~ /^[\s\t]*[\#]*target $targetname/) {
+		$bracketcount++;
+		$targetfound = 1;
+	    } else {
+		if ($targetfound == 1 && $bracketcount == 2 && $lunfound ==1 && $line =~ /[\s\t]*path /) {
+		    @tmp = split(/path/, $line);
+		    $line = $tmp[0]."path ".$device;
+		    $targetmodified = 1;
+		} else {
+		    if ($bracketcount > 0) {
+			if ($line =~ /.*\}/) {
+			    $bracketcount--;
+			    if ($lunfound == 1) {
+				$lunfound = 0;
+			    }
+			    # bracketcount was > 0 when entered, but then descreased to 0 -> means we're off the target
+			    if ($bracketcount == 0) {
+				$targetfound = 0;
+			    }
+			}
+			if ($line =~ /.*\{/) {
+			    $bracketcount++;
+			    if ($line =~ /lun $lun/) {
+				$lunfound = 1;
+			    }
+			}
+		    } else {
+		    }
+		}
+	    }
+	    print CTLCONFNEW $line, "\n";
+	}
+	close(CTLCONF);
+	close(CTLCONFNEW);
+	$spell = $sudopath." /bin/chmod 600 ".$ctlconfpath.".new";
+	system($spell);
+	$spell = $sudopath." /bin/mv ".$ctlconfpath.".new /etc/ctl.conf";
+	system($spell);
+	if ($targetmodified > 0) {
+	    print STDOUT "<debug>returning 0</debug>\n";
+	    return 0;
+	} else {
+	    print STDOUT "<debug>returning 1</debug>\n";
+	    return 1;
+	}
+    } else {
+	return 1;
+    }
+}
+
+sub handleresult() {
+    if ($result) {
+        print STDOUT "<status>success</status>\n";
+    } else {
+        print STDOUT "<status>error</status>\n";
+	print STDOUT "<errormessage>".$errormessage."</errormessage>\n";
+	print STDOUT "<log>\n";
+	$i = 0;
+	while ($i < @logcontents) {
+	    print STDOUT "<entry>".$logcontents[$i]."</entry>\n";
+	    $i++
+	}
+	print STDOUT "</log>\n";
+    }
+}
+
+sub handlestatus {
+    if ($result == 0) {
+        print STDOUT "<status>success</status>\n";
+    } else {
+        print STDOUT "<status>error</status>\n";
+	print STDOUT "<errormessage>".$errormessage."</errormessage>\n";
+    }
+    print STDOUT "<log>\n";
+    $i = 0;
+    while ($i < @logcontents) {
+	if ($logcontents[$i] =~ /^NAME/) {
+	} else {
+	    #print STDOUT "<raw>", $logcontents[$i], "</raw>";
+	    @tmp = split(/[\s\t]+/, $logcontents[$i]);
+	    print STDOUT "<zfsentity>\n";
+	    print STDOUT "<name>", $tmp[0], "</name>\n";
+	    print STDOUT "<used>", $tmp[1], "</used>\n";
+	    print STDOUT "<avail>", $tmp[2], "</avail>\n";
+	    print STDOUT "<refer>", $tmp[3], "</refer>\n";
+	    print STDOUT "<mountpoint>", $tmp[4], "</mountpoint>\n";
+	    print STDOUT "</zfsentity>\n";
+	}
+        $i++
+    }
+    print STDOUT "</log>\n";
+}
+
+getxmlhead();
+print STDOUT "<action>", $action, "</action>\n";
+ACTION:
+    for ($action) {
+	if (/^snapshot/) {
+	    print STDOUT "<snapsource>", $snapsource, "</snapsource>\n";
+	    print STDOUT "<snapname>", $snapname, "</snapname>\n";
+	    $result = getsnapshot();
+	    handleresult();
+	    last ACTION;
+	}
+	if (/^clone/) {
+	    print STDOUT "<clonesource>", $clonesource, "</clonesource>\n";
+	    print STDOUT "<clonename>", $clonename, "</clonename>\n";
+	    $result = getclone();
+	    handleresult();
+	    last ACTION;
+	}
+	if (/^destroy/) {
+	    print STDOUT "<victim>", $victim, "</victim>\n";
+	    $result = destroyentity();
+	    handleresult();
+	    last ACTION;
+	}
+	if (/^status/) {
+	    print STDOUT "<status/>\n";
+	    $result = getstatus();
+	    handlestatus();
+	    last ACTION;
+	}
+	if (/^targetmount/) {
+	    print STDOUT "<targetname>", $targetname, "</targetname>\n";
+	    print STDOUT "<device>", $device, "</device>\n";
+	    print STDOUT "<lun>", $lun, "</lun>\n";
+	    $result = mounttarget();
+	    if ($result == 0) {
+		print STDOUT "<status>success</status>\n";
+	    } else {
+		print STDOUT "<status>error</status>\n";
+	    }
+	    last ACTION;
+	}
+	if (/^targetenable/) {
+	    print STDOUT "<targetname>", $targetname, "</targetname>\n";
+	    $result = enabletarget();
+	    if ($result == 0) {
+		print STDOUT "<status>success</status>\n";
+	    } else {
+		print STDOUT "<status>error</status>\n";
+		print STDOUT "<errormessage>".$errormessage."</errormessage>\n";
+	    }
+	    last ACTION;
+	}
+	if (/^targetdisable/) {
+	    print STDOUT "<targetname>", $targetname, "</targetname>\n";
+	    $result = disabletarget();
+	    if ($result == 0) {
+		print STDOUT "<status>success</status>\n";
+	    } else {
+		print STDOUT "<status>error</status>\n";
+		print STDOUT "<errormessage>".$errormessage."</errormessage>\n";
+	    }
+	    last ACTION;
+	}
+	#$nothing = 1;
+    }
+getxmlfoot();
