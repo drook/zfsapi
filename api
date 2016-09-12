@@ -6,7 +6,7 @@ use v5.14;
 use Data::UUID;
 
 #-----------------------------
-my $version = "0.99.5";
+my $version = "0.99.6";
 my $i;
 my $action = "null";
 my $snapsource = "null";
@@ -62,7 +62,7 @@ sub dumpall() {
 $i = 0;
 while ($i < @request) {
     chomp($request[$i]);
-    if ($request[$i] =~ "action") {
+    if ($request[$i] =~ "^action") {
 	@tmp = split(/=/, $request[$i]);
 	if (defined($tmp[1])) {
 	    $action = $tmp[1];
@@ -70,7 +70,7 @@ while ($i < @request) {
 	    $action = "null";
 	}
     }
-    if ($request[$i] =~ "snapsource") {
+    if ($request[$i] =~ "^snapsource") {
 	@tmp = split(/=/, $request[$i]);
 	if (defined($tmp[1])) {
 	    $snapsource = $tmp[1];
@@ -78,7 +78,7 @@ while ($i < @request) {
 	    $snapsource = "null";
 	}
     }
-    if ($request[$i] =~ "snapname") {
+    if ($request[$i] =~ "^snapname") {
 	@tmp = split(/=/, $request[$i]);
 	if (defined($tmp[1])) {
 	    $snapname = $tmp[1];
@@ -86,7 +86,7 @@ while ($i < @request) {
 	    $snapname = "null";
 	}
     }
-    if ($request[$i] =~ "victim") {
+    if ($request[$i] =~ "^victim") {
 	@tmp = split(/=/, $request[$i]);
 	if (defined($tmp[1])) {
 	    $victim = $tmp[1];
@@ -94,7 +94,7 @@ while ($i < @request) {
 	    $victim = "null";
 	}
     }
-    if ($request[$i] =~ "clonesource") {
+    if ($request[$i] =~ "^clonesource") {
 	@tmp = split(/=/, $request[$i]);
 	if (defined($tmp[1])) {
 	    $clonesource = $tmp[1];
@@ -102,7 +102,7 @@ while ($i < @request) {
 	    $clonesource = "null";
 	}
     }
-    if ($request[$i] =~ "clonename") {
+    if ($request[$i] =~ "^clonename") {
 	@tmp = split(/=/, $request[$i]);
 	if (defined($tmp[1])) {
 	    $clonename = $tmp[1];
@@ -158,7 +158,7 @@ sub getsnapshot() {
     @time = localtime(time());
     $time[4]++;
     $time[5] += 1900;
-    if (defined($snapsource) && defined($snapname)) {
+    if (defined($snapsource) && defined($snapname) && $snapsource ne "null" && $snapname ne "null") {
 	$snapsourcefmt = $snapsource;
 	$snapsourcefmt =~ s/\//_/g;
 	$logpath = $tmppath."/snapshot-".$snapsourcefmt."-".$snapname."-".$time[5]."-".$time[4]."-".$time[3]."-".$time[2]."-".$time[1]."-".$time[0].".log";
@@ -166,10 +166,10 @@ sub getsnapshot() {
 	system($spell);
 	parselog();
 	if (@logcontents > 0) {
-	    return 0;
-	} else {
 	    $errormessage = "log file not empty.";
 	    return 1;
+	} else {
+	    return 0;
 	}
     } else {
 	$errormessage = "missing snapshot source or snapshot name.";
@@ -182,7 +182,7 @@ sub getclone() {
     @time = localtime(time());
     $time[4]++;
     $time[5] += 1900;
-    if (defined($snapsource) && defined($snapname)) {
+    if (defined($clonesource) && defined($clonename) && $clonesource ne "null" && $clonename ne "null") {
 	$clonesourcefmt = $clonesource;
 	$clonesourcefmt =~ s/\//_/g;
 	$clonenamefmt =~ s/\//_/g;
@@ -191,10 +191,10 @@ sub getclone() {
 	system($spell);
 	parselog();
 	if (@logcontents > 0) {
-	    return 0;
-	} else {
 	    $errormessage = "log file not empty.";
 	    return 1;
+	} else {
+	    return 0;
 	}
     } else {
 	$errormessage = "missing snapshot source or snapshot name.";
