@@ -6,7 +6,7 @@ use v5.14;
 use Data::UUID;
 
 #-----------------------------
-my $version = "0.99.6";
+my $version = "0.99.9";
 my $i;
 my $action = "null";
 my $snapsource = "null";
@@ -214,13 +214,25 @@ sub getstatus() {
     return 0;
 }
 
+sub getreload() {
+    #($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst)
+    @time = localtime(time());
+    $time[4]++;
+    $time[5] += 1900;
+    $logpath = $tmppath."/reload-".$time[5]."-".$time[4]."-".$time[3]."-".$time[2]."-".$time[1]."-".$time[0].".log";
+    $spell = $sudopath." /usr/sbin/service ctld reload >".$logpath." 2>&1";
+    system($spell);
+    parselog();
+    return 0;
+}
+
 sub destroyentity() {
     #($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst)
     @time = localtime(time());
     $time[4]++;
     $time[5] += 1900;
     if (defined($victim)) {
-	$victimfmt = $clonesource;
+	$victimfmt = $victim;
 	$victimfmt =~ s/\//_/g;
 	$logpath = $tmppath."/destroy-".$victimfmt."-".$time[5]."-".$time[4]."-".$time[3]."-".$time[2]."-".$time[1]."-".$time[0].".log";
 	$spell = $sudopath." /sbin/zfs destroy ".$victim." >".$logpath." 2>&1";
@@ -285,8 +297,6 @@ sub enabletarget() {
 	system($spell);
 	$spell = $sudopath." /bin/mv ".$ctlconfpath.".new /etc/ctl.conf";
 	system($spell);
-	$spell = $sudopath." /usr/sbin/service ctld reload";
-	system($spell);
 	print STDOUT "<debug>returning 0</debug>\n";
 	if ($targetfound > 0) {
 	    return 0;
@@ -328,6 +338,7 @@ sub disabletarget() {
 	    } else {
 		if ($line =~ /^\#[\s\t]*target $targetname/) {
 		    $errormessage = "target is disabled already.";
+		    $targetfound = 1;
 		}
 		if ($bracketcount > 0) {
 		    if ($line =~ /.*\}/) {
@@ -351,8 +362,6 @@ sub disabletarget() {
 	$spell = $sudopath." /bin/chmod 600 ".$ctlconfpath.".new";
 	system($spell);
 	$spell = $sudopath." /bin/mv ".$ctlconfpath.".new /etc/ctl.conf";
-	system($spell);
-	$spell = $sudopath." /usr/sbin/service ctld reload";
 	system($spell);
 	if ($targetfound > 0) {
 	    print STDOUT "<debug>returning 0</debug>\n";
@@ -546,6 +555,17 @@ ACTION:
 	    }
 	    last ACTION;
 	}
-	#$nothing = 1;
+	if (/^reload/) {
+	    $result = getreload();
+	    if ($result == 0) {
+		print STDOUT "<status>success</status>\n";
+	    } else {
+		print STDOUT "<status>error</status>\n";
+		print STDOUT "<errormessage>".$errormessage."</errormessage>\n";
+	    }
+	    last ACTION;
+	}
+	print STDOUT "<status>error</status>\n";
+	print STDOUT "<status>You have requested something that I don't understand.</status>\n";
     }
 getxmlfoot();
