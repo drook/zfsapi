@@ -6,7 +6,7 @@ use v5.14;
 use Data::UUID;
 
 #-----------------------------
-my $version = "0.99.9";
+my $version = "1.0";
 my $i;
 my $action = "null";
 my $snapsource = "null";
@@ -35,6 +35,7 @@ my $line;
 my $ctlconfpath = "/tmp/ctl.conf";
 my $sudopath = "/usr/local/bin/sudo";
 my $tmppath = "/tmp";
+my $debug = 0;
 #-----------------------------
 
 print STDOUT "Content-Type: text/xml;\n";
@@ -149,6 +150,9 @@ sub parselog() {
 	    push @logcontents, $line;
 	}
 	close(LOG);
+	if ($debug == 0) {
+	    unlink($logpath);
+	}
     } else {
     }
 }
@@ -271,7 +275,7 @@ sub enabletarget() {
 	while (!eof(CTLCONF)) {
 	    $line = readline(*CTLCONF);
 	    chomp($line);
-	    if ($line =~ /^[\s\t]*\#target $targetname/) {
+	    if ($line =~ /^[\s\t]*\#target $targetname[\s\t]*\{/) {
 		$bracketcount++;
 		$targetfound = 1;
 		$line = substr($line, 1)
@@ -336,7 +340,7 @@ sub disabletarget() {
 		#print STDOUT "<debug># ".$line."</debug>\n";
 		print CTLCONFNEW "#", $line, "\n";
 	    } else {
-		if ($line =~ /^\#[\s\t]*target $targetname/) {
+		if ($line =~ /^\#[\s\t]*target $targetname[\s\t]*\{/) {
 		    $errormessage = "target is disabled already.";
 		    $targetfound = 1;
 		}
@@ -398,7 +402,7 @@ sub mounttarget() {
 	while (!eof(CTLCONF)) {
 	    $line = readline(*CTLCONF);
 	    chomp($line);
-	    if ($line =~ /^[\s\t]*[\#]*target $targetname/) {
+	    if ($line =~ /^[\s\t]*[\#]*target $targetname[\s\t]*\{/) {
 		$bracketcount++;
 		$targetfound = 1;
 	    } else {
@@ -516,7 +520,6 @@ ACTION:
 	    last ACTION;
 	}
 	if (/^status/) {
-	    print STDOUT "<status/>\n";
 	    $result = getstatus();
 	    handlestatus();
 	    last ACTION;
@@ -563,6 +566,10 @@ ACTION:
 		print STDOUT "<status>error</status>\n";
 		print STDOUT "<errormessage>".$errormessage."</errormessage>\n";
 	    }
+	    last ACTION;
+	}
+	if (/^version/) {
+	    print STDOUT "<version>".$version."</version>\n";
 	    last ACTION;
 	}
 	print STDOUT "<status>error</status>\n";
