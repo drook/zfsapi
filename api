@@ -6,7 +6,7 @@ use v5.14;
 use Data::UUID;
 
 #-----------------------------
-my $version = "1.1";
+my $version = "1.2";
 my $i;
 my $action = "null";
 my $snapsource = "null";
@@ -301,7 +301,7 @@ sub enabletarget() {
 		$targetfound = 1;
 		$line = substr($line, 1)
 	    } else {
-		if ($line =~ /^[\s\t]*target $targetname/) {
+		if ($line =~ /^[\s\t]*target $targetname[\s\t]*\{/) {
 		    $errormessage = "target is enabled already.";
 		}
 		if ($bracketcount > 0) {
@@ -360,7 +360,7 @@ sub disabletarget() {
 	while (!eof(CTLCONF)) {
 	    $line = readline(*CTLCONF);
 	    chomp($line);
-	    if ($line =~ /^[\s\t]*target $targetname/) {
+	    if ($line =~ /^[\s\t]*target $targetname[\s\t]*\{/) {
 		$bracketcount++;
 		$targetfound = 1;
 		#print STDOUT "<debug>BRACKETCOUNT UP: ".$bracketcount."</debug>\n";
