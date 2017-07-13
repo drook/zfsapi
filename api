@@ -6,7 +6,7 @@ use v5.14;
 use Data::UUID;
 
 #-----------------------------
-my $version = "1.2";
+my $version = "1.3.1";
 my $i;
 my $action = "null";
 my $snapsource = "null";
@@ -35,7 +35,7 @@ my $line;
 my $ctlconfpath = "/tmp/ctl.conf";
 my $sudopath = "/usr/local/bin/sudo";
 my $tmppath = "/tmp";
-my $debug = 0;
+my $debug = 1;
 #-----------------------------
 
 print STDOUT "Content-Type: text/xml;\n";
@@ -197,16 +197,13 @@ sub getclone() {
 	$spell = $sudopath." /sbin/zfs clone ".$clonesource." ".$clonename." >".$logpath." 2>&1";
 	system($spell);
 	parselog();
+	if ($debug == 0) {
+	    unlink($logpath);
+        }
 	if (@logcontents > 0) {
 	    $errormessage = "log file not empty.";
-	    if ($debug == 0) {
-		unlink($logpath);
-	    }
 	    return 1;
 	} else {
-	    if ($debug == 0) {
-		unlink($logpath);
-	    }
 	    return 0;
 	}
     } else {
@@ -245,6 +242,94 @@ sub getreload() {
     return 0;
 }
 
+sub formatspell {
+    my $spellfmt;
+
+    $spellfmt = $_[0];
+
+    $spellfmt =~ s/\&/\&amp\;/g;
+    $spellfmt =~ s/\>/\&gt\;/g;
+
+    return $spellfmt;
+}
+
+sub getrelease() {
+
+    my $ug;
+    my $uuid;
+    my $ctladmlogpath;
+    my @temp;
+    my $ctladmlines = 0;
+    my $devicefound = 0;
+
+    my $blockdev;
+    my $vdev;
+
+    if (defined($victim) && $victim ne "null") {
+	$ug = Data::UUID -> new;
+	$uuid = $ug -> create_str();
+	
+	$ctladmlogpath = "/tmp/ctladm.log.".$uuid;
+	$spell = $sudopath." /usr/sbin/ctladm devlist -v > ".$ctladmlogpath;
+	system($spell);
+	open(CTLADMLOG, "<", $ctladmlogpath) or return 1;
+	while (!eof(CTLADMLOG)) {
+	    $line = readline(*CTLADMLOG);
+	    chomp($line);
+
+	    if ($line =~ /^[\s\t]*\d+ block/) {
+		@temp = split(/ +/, $line);
+		$blockdev = $temp[1];
+	    } else {
+		if ($line =~ /^[\s\t]*file=/) {
+		    @temp = split(/=/, $line);
+		    $vdev = $temp[1];
+
+		    if ($vdev eq '/dev/zvol/'.$victim ) {
+			# we found our victim
+			$devicefound = 1;
+			@time = localtime(time());
+			$time[4]++;
+			$time[5] += 1900;
+			$victimfmt = $victim;
+			$victimfmt =~ s/\//_/g;
+			$logpath = $tmppath."/release-".$victimfmt."-".$time[5]."-".$time[4]."-".$time[3]."-".$time[2]."-".$time[1]."-".$time[0].".log";
+			$spell = $sudopath." /usr/sbin/ctladm remove -b block -l ".$blockdev." >".$logpath." 2>&1";
+			if ($debug > 0) {
+			    print STDOUT "<debug>".formatspell($spell)."</debug>\n";
+			}
+			system($spell);
+			parselog();
+			if ($debug == 0) {
+			    unlink($logpath);
+			    close(CTLADMLOG);
+			    unlink($ctladmlogpath);
+			}
+			if (@logcontents == 1 && $logcontents[0] =~ /LUN \d+ removed successfully/) {
+			    return 0;
+			} else {
+			    $errormessage = "log file tell me something got wrong.";
+			    return 1;
+			}
+		    }
+		}
+	    }
+	    $ctladmlines++;
+	}
+	if ($devicefound == 0) {
+	    $errormessage = "didn't find device to release.";
+	    return 1;
+	}
+	if ($ctladmlines <= 1) {
+	    $errormessage = "ctladm log is empty, check sudo permissions.";
+	    return 1;
+	}
+    } else {
+	$errormessage = "missing entity name to release.";
+	return 1;
+    }
+}
+
 sub destroyentity() {
     #($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst)
     @time = localtime(time());
@@ -257,16 +342,13 @@ sub destroyentity() {
 	$spell = $sudopath." /sbin/zfs destroy ".$victim." >".$logpath." 2>&1";
 	system($spell);
 	parselog();
+	if ($debug == 0) {
+	    unlink($logpath);
+	}
 	if (@logcontents > 0) {
 	    $errormessage = "log file not empty.";
-	    if ($debug == 0) {
-		unlink($logpath);
-	    }
 	    return 1;
 	} else {
-	    if ($debug == 0) {
-		unlink($logpath);
-	    }
 	    return 0;
 	}
     } else {
@@ -322,16 +404,15 @@ sub enabletarget() {
 	system($spell);
 	$spell = $sudopath." /bin/mv ".$ctlconfpath.".new /etc/ctl.conf";
 	system($spell);
-	print STDOUT "<debug>returning 0</debug>\n";
+	if ($debug > 0) {
+	    print STDOUT "<debug>returning 0</debug>\n";
+	}
+	if ($debug == 0) {
+	    unlink($logpath);
+	}
 	if ($targetfound > 0) {
-	    if ($debug == 0) {
-		unlink($logpath);
-	    }
 	    return 0;
 	} else {
-	    if ($debug == 0) {
-		unlink($logpath);
-	    }
 	    return 1;
 	}
     } else {
@@ -394,17 +475,16 @@ sub disabletarget() {
 	system($spell);
 	$spell = $sudopath." /bin/mv ".$ctlconfpath.".new /etc/ctl.conf";
 	system($spell);
+	if ($debug == 0) {
+	    unlink($logpath);
+        }
 	if ($targetfound > 0) {
-	    if ($debug == 0) {
+	    if ($debug > 0) {
 		print STDOUT "<debug>returning 0</debug>\n";
-		unlink($logpath);
 	    }
 	    return 0;
 	} else {
 	    $errormessage = "target not found.";
-	    if ($debug == 0) {
-		unlink($logpath);
-	    }
 	    return 1;
 	}
     } else {
@@ -473,16 +553,17 @@ sub mounttarget() {
 	system($spell);
 	$spell = $sudopath." /bin/mv ".$ctlconfpath.".new /etc/ctl.conf";
 	system($spell);
+	if ($debug == 0) {
+	    unlink($logpath);
+	}
 	if ($targetmodified > 0) {
-	    if ($debug == 0) {
+	    if ($debug > 0) {
 		print STDOUT "<debug>returning 0</debug>\n";
-		unlink($logpath);
 	    }
 	    return 0;
 	} else {
-	    if ($debug == 0) {
+	    if ($debug < 0) {
 		print STDOUT "<debug>returning 1</debug>\n";
-		unlink($logpath);
 	    }
 	    return 1;
 	}
@@ -597,6 +678,17 @@ ACTION:
 	    }
 	    last ACTION;
 	}
+	if (/^release/) {
+	    print STDOUT "<victim>", $victim, "</victim>\n";
+	    $result = getrelease();
+	    if ($result == 0) {
+		print STDOUT "<status>success</status>\n";
+	    } else {
+		print STDOUT "<status>error</status>\n";
+		print STDOUT "<errormessage>".$errormessage."</errormessage>\n";
+	    }
+	    last ACTION;
+	}
 	if (/^reload/) {
 	    $result = getreload();
 	    if ($result == 0) {
@@ -608,6 +700,7 @@ ACTION:
 	    last ACTION;
 	}
 	if (/^version/) {
+	    print STDOUT "<status>success</status>\n";
 	    print STDOUT "<version>".$version."</version>\n";
 	    last ACTION;
 	}
