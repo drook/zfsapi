@@ -6,7 +6,7 @@ use v5.14;
 use Data::UUID;
 
 #-----------------------------
-my $version = "1.3.2";
+my $version = "1.3.3";
 my $i;
 my $action = "null";
 my $snapsource = "null";
@@ -279,7 +279,7 @@ sub getrelease() {
 
 	    if ($line =~ /^[\s\t]*\d+ block/) {
 		@temp = split(/ +/, $line);
-		$blockdev = $temp[1];
+		$blockdev = $temp[0];
 	    } else {
 		if ($line =~ /^[\s\t]*file=/) {
 		    @temp = split(/=/, $line);
@@ -686,6 +686,15 @@ ACTION:
 	    } else {
 		print STDOUT "<status>error</status>\n";
 		print STDOUT "<errormessage>".$errormessage."</errormessage>\n";
+		if (@logcontents > 0) {
+		    print STDOUT "<log>\n";
+		    $i = 0;
+		    while ($i < @logcontents) {
+			print STDOUT "<entry>".$logcontents[$i]."</entry>\n";
+			$i++
+		    }
+		    print STDOUT "</log>\n";
+		}
 	    }
 	    last ACTION;
 	}
