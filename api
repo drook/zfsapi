@@ -6,7 +6,7 @@ use v5.14;
 use Data::UUID;
 
 #-----------------------------
-my $version = "1.3.1";
+my $version = "1.3.2";
 my $i;
 my $action = "null";
 my $snapsource = "null";
@@ -270,7 +270,7 @@ sub getrelease() {
 	$uuid = $ug -> create_str();
 	
 	$ctladmlogpath = "/tmp/ctladm.log.".$uuid;
-	$spell = $sudopath." /usr/sbin/ctladm devlist -v > ".$ctladmlogpath;
+	$spell = $sudopath." /usr/sbin/ctladm devlist -v > ".$ctladmlogpath." 2>&1";
 	system($spell);
 	open(CTLADMLOG, "<", $ctladmlogpath) or return 1;
 	while (!eof(CTLADMLOG)) {
@@ -308,7 +308,7 @@ sub getrelease() {
 			if (@logcontents == 1 && $logcontents[0] =~ /LUN \d+ removed successfully/) {
 			    return 0;
 			} else {
-			    $errormessage = "log file tell me something got wrong.";
+			    $errormessage = "log file tells me something got wrong.";
 			    return 1;
 			}
 		    }
