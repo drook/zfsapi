@@ -6,7 +6,7 @@ use v5.14;
 use Data::UUID;
 
 #-----------------------------
-my $version = "1.3.3";
+my $version = "1.4.0";
 my $i;
 my $action = "null";
 my $snapsource = "null";
@@ -273,7 +273,7 @@ sub getrelease() {
 	$spell = $sudopath." /usr/sbin/ctladm devlist -v > ".$ctladmlogpath." 2>&1";
 	system($spell);
 	open(CTLADMLOG, "<", $ctladmlogpath) or return 1;
-	while (!eof(CTLADMLOG)) {
+	while (!eof(CTLADMLOG) && $devicefound == 0) {
 	    $line = readline(*CTLADMLOG);
 	    chomp($line);
 
@@ -300,21 +300,21 @@ sub getrelease() {
 			}
 			system($spell);
 			parselog();
-			if ($debug == 0) {
-			    unlink($logpath);
-			    close(CTLADMLOG);
-			    unlink($ctladmlogpath);
-			}
-			if (@logcontents == 1 && $logcontents[0] =~ /LUN \d+ removed successfully/) {
-			    return 0;
-			} else {
-			    $errormessage = "log file tells me something got wrong.";
-			    return 1;
-			}
 		    }
 		}
 	    }
 	    $ctladmlines++;
+	}
+	if ($debug == 0) {
+	    unlink($logpath);
+	    close(CTLADMLOG);
+	    unlink($ctladmlogpath);
+	}
+	if (@logcontents == 1 && $logcontents[0] =~ /LUN \d+ removed successfully/) {
+	    return 0;
+	} else {
+	    $errormessage = "log file tells me something got wrong.";
+	    return 1;
 	}
 	if ($devicefound == 0) {
 	    $errormessage = "didn't find device to release.";
@@ -327,6 +327,77 @@ sub getrelease() {
     } else {
 	$errormessage = "missing entity name to release.";
 	return 1;
+    }
+}
+
+sub gettargetinfo() {
+
+    my $ug;
+    my $uuid;
+    my $ctladmlogpath;
+    my @temp;
+    my $ctladmlines = 0;
+    my $devicefound = 0;
+
+    my $blockdev = "null";
+    my $device;
+    my $ctldname;
+
+    if (defined($targetname) && $targetname ne "null") {
+	$ug = Data::UUID -> new;
+	$uuid = $ug -> create_str();
+	
+	$ctladmlogpath = "/tmp/ctladm.log.".$uuid;
+	$spell = $sudopath." /usr/sbin/ctladm devlist -v > ".$ctladmlogpath." 2>&1";
+	system($spell);
+	open(CTLADMLOG, "<", $ctladmlogpath) or return 1;
+	while (!eof(CTLADMLOG) && $devicefound == 0) {
+	    $line = readline(*CTLADMLOG);
+	    chomp($line);
+
+	    if ($line =~ /^[\s\t]*\d+ block/) {
+		@temp = split(/ +/, $line);
+		$blockdev = $temp[0];
+	    } else {
+		if ($line =~ /^[\s\t]*ctld_name=/) {
+		    @temp = split(/=/, $line);
+		    $ctldname = $temp[1];
+
+		    if ($ctldname =~ /$targetname,lun,\d+/) {
+			# we found our target
+			$devicefound = 1;
+		    } else {
+		    }
+		} else {
+		    if ($line =~ /^[\s\t]*file=\/dev\/zvol\/.+/) {
+			@temp = split(/=/, $line);
+			$device = @temp[1];
+		    }
+		}
+	    }
+	    $ctladmlines++;
+	}
+	if ($debug == 0) {
+	    unlink($logpath);
+	    close(CTLADMLOG);
+	    unlink($ctladmlogpath);
+	}
+
+	if ($devicefound != 0) {
+	    return $device;
+	}
+
+	if ($devicefound == 0) {
+	    $errormessage = "didn't find requested the device this target is serving.";
+	    return -1;
+	}
+	if ($ctladmlines <= 1) {
+	    $errormessage = "ctladm log is empty, check sudo permissions.";
+	    return -1;
+	}
+    } else {
+	$errormessage = "missing target name to get info about.";
+	return -1;
     }
 }
 
@@ -702,6 +773,18 @@ ACTION:
 	    $result = getreload();
 	    if ($result == 0) {
 		print STDOUT "<status>success</status>\n";
+	    } else {
+		print STDOUT "<status>error</status>\n";
+		print STDOUT "<errormessage>".$errormessage."</errormessage>\n";
+	    }
+	    last ACTION;
+	}
+	if (/^targetinfo/) {
+	    $result = gettargetinfo();
+	    if ($result != -1) {
+		print STDOUT "<status>success</status>\n";
+		print STDOUT "<targetname>".$targetname."</targetname>\n";
+		print STDOUT "<targetinfo>".$result."</targetinfo>\n";
 	    } else {
 		print STDOUT "<status>error</status>\n";
 		print STDOUT "<errormessage>".$errormessage."</errormessage>\n";
