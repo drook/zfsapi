@@ -4,14 +4,18 @@ use strict;
 use English;
 use v5.14;
 use Data::UUID;
+use POSIX 'setsid';
+use POSIX ":sys_wait_h";
 
 #-----------------------------
-my $version = "1.4.0";
+my $version = "1.5.0";
+my $pname = "zfsapi";
 my $i;
 my $action = "null";
 my $snapsource = "null";
 my $snapsourcefmt;
 my $snapname = "null";
+my $bookmarkname = "null";
 my $victim = "null";
 my $clonesource = "null";
 my $clonesourcefmt;
@@ -31,15 +35,19 @@ my $logpath;
 my $result;
 my @logcontents;
 my $line;
+my $remotedcip;
+my $remotedataset;
+my $startsnapshot;
+my $endsnapshot;
 # paths
 my $ctlconfpath = "/tmp/ctl.conf";
 my $sudopath = "/usr/local/bin/sudo";
 my $tmppath = "/tmp";
+my $loglocation = "/var/log/zfsreplica";
+# debug: 0 - none, 1 - basic, 2 - extensive
 my $debug = 1;
+my %children;
 #-----------------------------
-
-print STDOUT "Content-Type: text/xml;\n";
-print STDOUT "\n";
 
 sub getxmlhead(){
     print STDOUT "<?xml version=\"1.0\"?>\n";
@@ -55,87 +63,6 @@ sub dumpall() {
     foreach $i(keys(%ENV)) {
 	print STDOUT "<env>", $i, ": ", $ENV{$i}, "</env>\n";
     }
-}
-
-
-# parsing REQUEST_URI
-@request = split(/[\?\&]/, $ENV{'REQUEST_URI'});
-$i = 0;
-while ($i < @request) {
-    chomp($request[$i]);
-    if ($request[$i] =~ "^action") {
-	@tmp = split(/=/, $request[$i]);
-	if (defined($tmp[1])) {
-	    $action = $tmp[1];
-	} else {
-	    $action = "null";
-	}
-    }
-    if ($request[$i] =~ "^snapsource") {
-	@tmp = split(/=/, $request[$i]);
-	if (defined($tmp[1])) {
-	    $snapsource = $tmp[1];
-	} else {
-	    $snapsource = "null";
-	}
-    }
-    if ($request[$i] =~ "^snapname") {
-	@tmp = split(/=/, $request[$i]);
-	if (defined($tmp[1])) {
-	    $snapname = $tmp[1];
-	} else {
-	    $snapname = "null";
-	}
-    }
-    if ($request[$i] =~ "^victim") {
-	@tmp = split(/=/, $request[$i]);
-	if (defined($tmp[1])) {
-	    $victim = $tmp[1];
-	} else {
-	    $victim = "null";
-	}
-    }
-    if ($request[$i] =~ "^clonesource") {
-	@tmp = split(/=/, $request[$i]);
-	if (defined($tmp[1])) {
-	    $clonesource = $tmp[1];
-	} else {
-	    $clonesource = "null";
-	}
-    }
-    if ($request[$i] =~ "^clonename") {
-	@tmp = split(/=/, $request[$i]);
-	if (defined($tmp[1])) {
-	    $clonename = $tmp[1];
-	} else {
-	    $clonename = "null";
-	}
-    }
-    if ($request[$i] =~ "targetname") {
-	@tmp = split(/=/, $request[$i]);
-	if (defined($tmp[1])) {
-	    $targetname = $tmp[1];
-	} else {
-	    $targetname = "null";
-	}
-    }
-    if ($request[$i] =~ "device") {
-	@tmp = split(/=/, $request[$i]);
-	if (defined($tmp[1])) {
-	    $device = $tmp[1];
-	} else {
-	    $device = "null";
-	}
-    }
-    if ($request[$i] =~ "lun") {
-	@tmp = split(/=/, $request[$i]);
-	if (defined($tmp[1])) {
-	    $lun = $tmp[1];
-	} else {
-	    $lun = "null";
-	}
-    }
-    $i++;
 }
 
 sub parselog() {
@@ -180,6 +107,38 @@ sub getsnapshot() {
 	}
     } else {
 	$errormessage = "missing snapshot source or snapshot name.";
+	return 1;
+    }
+}
+
+sub getbookmark() {
+    #($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst)
+    my $source;
+    my @tmp;
+
+    @time = localtime(time());
+    $time[4]++;
+    $time[5] += 1900;
+    if (defined($snapsource) && defined($bookmarkname) && $snapsource ne "null" && $bookmarkname ne "null") {
+	@tmp = split(/@/, $snapsource);
+	$source = $tmp[0];
+	$snapsourcefmt = $snapsource;
+	$snapsourcefmt =~ s/\//_/g;
+	$logpath = $tmppath."/bookmark-".$snapsourcefmt."-".$bookmarkname."-".$time[5]."-".$time[4]."-".$time[3]."-".$time[2]."-".$time[1]."-".$time[0].".log";
+	$spell = $sudopath." /sbin/zfs bookmark ".$snapsource." ".$source."#".$bookmarkname." >".$logpath." 2>&1";
+	system($spell);
+	parselog();
+	if (@logcontents > 0) {
+	    $errormessage = "log file not empty.";
+	    return 1;
+	} else {
+	    if ($debug == 0) {
+		unlink($logpath);
+	    }
+	    return 0;
+	}
+    } else {
+	$errormessage = "missing snapshot source or bookmark name.";
 	return 1;
     }
 }
@@ -686,6 +645,541 @@ sub handlestatus {
     print STDOUT "</log>\n";
 }
 
+sub getsendingdetails() {
+    # return the number of sending processes or -1 if error occured
+    my $ug;
+    my $uuid;
+    my $linecount = 0;
+    my $lognamestart;
+    my $spell;
+    my $rs;
+
+    my $estimated;
+    my $sent;
+    my @tmp;
+    my $sendlogpath;
+
+    if (defined($remotedcip) && defined($startsnapshot) && defined($endsnapshot)) {
+	$ug = Data::UUID -> new;
+	$uuid = $ug -> create_str();
+	$logpath = "/tmp/zfs-send-details-".$uuid.".log";
+
+	$spell = "ps awwwwx | grep zfs\\ send | grep @".$startsnapshot." | grep @".$endsnapshot." | egrep -v 'sudo|grep' | wc -l | tr -d ' ' >".$logpath;
+	if ($debug > 0) {
+	    print STDOUT "<debug><spell>".$spell."</spell></debug>"
+	}
+	system($spell);
+	open(LOG, "<".$logpath);
+	while (!eof(LOG)) {
+	    $line = readline(LOG);
+	    chomp($line);
+	    $linecount++;
+	}
+	close(LOG);
+
+	if ($linecount > 1) {
+	    $errormessage = "log lines number is greater than one.";
+	    return -1;
+	} else {
+	    print STDOUT "<active>".$line."</active>";
+	    $uuid = $ug -> create_str();
+	    $logpath = "/tmp/zfs-send-details-ps-".$uuid.".log";
+	    $lognamestart = "zfs-send-".$remotedcip;
+	    $spell = "ls -l ".$loglocation." | grep ".$lognamestart." | grep @".$startsnapshot." | grep @".$endsnapshot." | awk '{print $9}' >".$logpath;
+	    system($spell);
+
+	    $rs = open(SPELLLOG, "<".$logpath);
+	    if ($rs > 0) {
+		$linecount = 0;
+		while (!eof(SPELLLOG)) {
+		    $line = readline(SPELLLOG);
+		    chomp($line);
+		    if ($debug > 1) {
+			print STDOUT "<debug><rawline>".$line."</rawline></debug>"
+		    }
+		    chomp($line);
+		    @tmp = split(/[\s\t]+/, $line);
+		    $sendlogpath = $tmp[8];
+		    $linecount++;
+		}
+		close(SPELLLOG);
+	    } else {
+		$errormessage = "cannot open file for reading: ".$logpath;
+		return -1;
+	    }
+
+	    if ($debug > 0) {
+		print STDOUT "<debug><sendlogpath>".$loglocation."/".$sendlogpath."</sendlogpath></debug>"
+	    }
+
+	    $rs = open(SENDLOG, "<".$loglocation."/".$sendlogpath);
+	    if ($rs > 0) {
+		while (!eof(SENDLOG)) {
+		    $line = readline(SENDLOG);
+		    chomp($line);
+		    if ($debug > 1) {
+			print STDOUT "<debug><rawline>".$line."</rawline></debug>"
+		    }
+		    if ($line =~ /total estimated size is/) {
+			@tmp = split(/[\s\t]+/, $line);
+			$estimated = $tmp[4];
+		    } else {
+			if ($line =~ /\d+:\d+:\d+/) {
+			    @tmp = split(/[\s\t]+/, $line);
+			    $sent = $tmp[1];
+			}
+		    }
+		}
+		close(SENDLOG);
+
+		# do the final data
+		return "<details>\n<totalestimated>".$estimated."</totalestimated>\n<alreadysent>".$sent."</alreadysent>\n</details>\n";
+	    } else {
+		$errormessage = "cannot open zfs send logfile for reading: ".$sendlogpath;
+		return -1;
+	    }
+	}
+    } else {
+	if (defined($remotedcip)) {
+	    if (defined($endsnapshot)) {
+		$errormessage = "start snapshot name not supplied.";
+	    } else {
+		$errormessage = "end snapshot name not supplied.";
+	    }
+	} else {
+	    $errormessage = "remote DC ip not supplied.";
+	}
+	return -1;
+    }
+}
+
+sub getsendingstatus() {
+    # return the number of sending processes or -1 if error occured
+    my $ug;
+    my $uuid;
+    my $linecount = 0;
+
+    if (defined($remotedcip)) {
+	$ug = Data::UUID -> new;
+	$uuid = $ug -> create_str();
+	$logpath = "/tmp/zfs-send-list-local.log.".$uuid;
+	
+	$spell = "ps awwwx | grep zfs\\ receive | grep ".$remotedcip." | grep -v grep | wc -l | tr -d ' ' >".$logpath;
+	system($spell);
+	open(LOG, "<".$logpath);
+	while (!eof(LOG)) {
+	    $line = readline(LOG);
+	    chomp($line);
+	    $linecount++;
+	}
+	close(LOG);
+	if ($linecount > 1) {
+	    $errormessage = "log lines number is greater than one.";
+	    return -1;
+	} else {
+	    return $line;
+	}
+    } else {
+	$errormessage = "remote DC ip not supplied.";
+	return -1;
+    }
+}
+
+sub getreceivingstatus() {
+    # return the number of sending processes or -1 if error occured
+    my $ug;
+    my $uuid;
+    my $linecount = 0;
+
+    $ug = Data::UUID -> new;
+    $uuid = $ug -> create_str();
+    $logpath = "/tmp/zfs-send-list-local.log.".$uuid;
+
+    $spell = "ps ax | grep zfs\\ receive | egrep -v 'grep|ssh' | wc -l | tr -d ' ' >".$logpath;
+    if ($debug > 0) {
+	print STDOUT "<debug>spell: ".$spell."</debug>"
+	
+    }
+    system($spell);
+    open(LOG, "<".$logpath);
+    while (!eof(LOG)) {
+        $line = readline(LOG);
+        chomp($line);
+        $linecount++;
+    }
+    close(LOG);
+    if ($linecount > 1) {
+        $errormessage = "log lines number is greater than one.";
+        return -1;
+    } else {
+        return $line;
+    }
+}
+
+sub senddelta() {
+    #remoteip="213.152.134.1"
+    #dataset2replicate="reference"
+    #localtank="data"
+    #remotetank="data"
+    #dcid="ver2"
+    #alreadysending="no"
+
+    my $logpath;
+    my $ug;
+    my $uuid;
+    my $firstsnapexists = 0;
+    my $secondsnapexists = 0;
+    my $line;
+    my @tmp;
+    my $remotestartsnapshot;
+    my $remoteendsnapshot;
+    my $elementcount;
+    my $startsnapshotescaped;
+    my $endsnapshotescaped;
+    my $startedat;
+    my $formattedspell;
+    my $pid;
+
+    $startedat = time();
+    if (defined($remotedcip) && defined($remotedataset) && defined($startsnapshot) && defined($endsnapshot)) {
+	$ug = Data::UUID -> new;
+	$uuid = $ug -> create_str();
+	$logpath = "/tmp/zfs-list-local.log.".$uuid;
+	
+	# make sure local snapshots exist
+	$spell = "zfs list -t snapshot >".$logpath;
+	system($spell);
+	open(LOG, "<".$logpath);
+	if ($debug > 1) {
+		print STDOUT "<debug>\n";
+	}
+	while (!eof(LOG) && ($firstsnapexists == 0 || $secondsnapexists == 0)) {
+	    if ($debug > 1) {
+	        print STDOUT "<firstsnapexists>".$firstsnapexists."</firstsnapexists>\n";
+	        print STDOUT "<secondsnapexists>".$secondsnapexists."</secondsnapexists>\n";
+	    }
+	    $line = readline(LOG);
+	    chomp($line);
+	    @tmp = split(/[\s\t]+/, $line);
+	    if ($debug > 1) {
+		print STDOUT "<line>".$tmp[0]."</line>\n";
+	    }
+	    if ($tmp[0] eq $startsnapshot) {
+		if ($debug > 1) {
+		    print STDOUT "<startercondition>matched</startercondition>\n";
+		}
+		$firstsnapexists = 1;
+	    } else {
+		if ($debug > 1) {
+		    print STDOUT "<startercondition>not matched</startercondition>\n";
+		}
+		if ($debug > 1) {
+		    print STDOUT "<comparsion>".$tmp[0]." doesn't match the ".$startsnapshot."</comparsion>\n";
+		}
+		if ($tmp[0] eq $endsnapshot) {
+		    if ($debug > 1) {
+			print STDOUT "<endcondition>matched</endcondition>\n";
+		    }
+		    $secondsnapexists = 1;
+		} else {
+		    if ($debug > 1) {
+			print STDOUT "<endcondition>not matched</endcondition>\n";
+			print STDOUT "<comparsion>".$tmp[0]." doesn't match the ".$endsnapshot."</comparsion>\n";
+		    }
+		}
+	    }
+	}
+	close(LOG);
+	if ($debug > 1) {
+	    print STDOUT "</debug>\n";
+	}
+
+	if ($debug > 0) {
+	    print STDOUT "<debug>\n";
+	    print STDOUT "<firstsnapexists>".$firstsnapexists."</firstsnapexists>\n";
+	    print STDOUT "<secondsnapexists>".$secondsnapexists."</secondsnapexists>\n";
+	    print STDOUT "</debug>\n";
+	}
+	# if they don't exist - then bail out
+	if ($firstsnapexists == 0 || $secondsnapexists == 0) {
+	    if ($firstsnapexists == 0) {
+		$errormessage = "start snapshot doesn't exist on local side.";
+	    } else {
+		$errormessage = "end snapshot doesn't exist on local side.";
+	    }
+	    return 1;
+	}
+
+	# make sure the zfs snapshot the diff is starting with exists on the remote side and the end doesn't
+	@tmp = split(/[\/@]/, $startsnapshot);
+	$elementcount = scalar(@tmp);
+	$remotestartsnapshot = $remotedataset."/".$tmp[$elementcount - 2]."@".$tmp[$elementcount - 1];
+	@tmp = split(/[\/@]/, $endsnapshot);
+	$elementcount = scalar(@tmp);
+	$remoteendsnapshot = $remotedataset."/".$tmp[$elementcount - 2]."@".$tmp[$elementcount - 1];
+	if ($debug > 0) {
+	    print STDOUT "<debug>\n";
+	    print STDOUT "<remotestartsnapshot>".$remotestartsnapshot."</remotestartsnapshot>\n";
+	    print STDOUT "<remoteendsnapshot>".$remoteendsnapshot."</remoteendsnapshot>\n";
+	    print STDOUT "</debug>\n";
+	}
+	$logpath = "/tmp/zfs-list-".$remotedcip.".log.".$uuid;
+	$spell = "ssh ".$remotedcip." zfs list -t snapshot >".$logpath;
+	system($spell);
+	$firstsnapexists = 0;
+	$secondsnapexists = 0;
+	if ($debug > 1) {
+		print STDOUT "<debug>\n";
+	}
+	open(LOG, "<".$logpath);
+	while (!eof(LOG) && ($firstsnapexists == 0 || $secondsnapexists == 0)) {
+	    $line = readline(LOG);
+	    chomp($line);
+	    @tmp = split(/[\s\t]+/, $line);
+	    if ($debug > 1) {
+		print STDOUT "<line>".$tmp[0]."</line>\n";
+	    }
+	    if ($tmp[0] eq $remotestartsnapshot) {
+		if ($debug > 1) {
+		    print STDOUT "<startercondition>matched</startercondition>\n";
+		}
+		$firstsnapexists = 1;
+	    } else {
+		if ($debug > 1) {
+		    print STDOUT "<startercondition>not matched</startercondition>\n";
+		}
+		if ($tmp[0] eq $remoteendsnapshot) {
+		    if ($debug > 1) {
+			print STDOUT "<endcondition>matched</endcondition>\n";
+		    }
+		    $secondsnapexists = 1;
+		}
+	    }
+	}
+	close(LOG);
+	if ($debug > 1) {
+		print STDOUT "</debug>\n";
+	}
+	if ($debug > 0) {
+	    print STDOUT "<debug>pre-send checks took ".(time() - $startedat)." seconds</debug>\n";
+	}
+
+	# if first snapshot doesn't exist on the remote - then bail out
+	if ($firstsnapexists == 0) {
+	    $errormessage = "start snapshot doesn't exist on the remote side.";
+	    return 1;
+	}
+
+	if ($secondsnapexists == 1) {
+	    $errormessage = "end snapshot already exists on the remote side.";
+	    return 1;
+	}
+
+	# now check if we're not sending it now
+	if (getsendingstatus() > 0) {
+	    $errormessage = "seems like we're already sending.";
+	    return 1;
+	}
+
+	# now send it
+	$startsnapshotescaped = $startsnapshot;
+	$startsnapshotescaped =~ s/\//--/g;
+	$endsnapshotescaped = $endsnapshot;
+	$endsnapshotescaped =~ s/\//--/g;
+	$logpath = $loglocation."/zfs-send-".$remotedcip."-".$startsnapshotescaped."-".$endsnapshotescaped.".log";
+	if ($debug > 0) {
+	    print STDOUT "<debug>\n";
+	    print STDOUT "<firstsnapexistsonremote>".$firstsnapexists."</firstsnapexistsonremote>\n";
+	    print STDOUT "<secondsnapexistsonremote>".$secondsnapexists."</secondsnapexistsonremote>\n";
+
+	    print STDOUT "<debug>okay to send the delta.</debug>\n";
+	    print STDOUT "<logpath>".$logpath."</logpath>\n";
+	    print STDOUT "</debug>\n";
+	}
+	$startedat = time();
+
+	$spell = "/usr/local/bin/sudo zfs send -vi ".$startsnapshot." ".$endsnapshot." 2>>".$logpath." | ssh ".$remotedcip." sudo zfs receive -d ".$remotedataset." &";
+	system($spell);
+
+	#$pid = fork();
+	#if (defined($pid)) {
+	#    if ($pid == 0) {
+	#	# we're in the child
+	#	$0 = "$pname [sending zfs data]";
+	#	system($spell);
+	#	exit(0);
+	#    } else {
+	#	# we're in parent
+	#	$children{$pid}=1;
+	#    }
+	#} else {
+	#    $errormessage = "Forking failed.";
+	#    return 1;
+	#}
+
+	if ($debug > 0) {
+	    $formattedspell = $spell;
+	    $formattedspell =~ s/&/&amp;/g;
+	    print STDOUT "<debug>replication spell: ".$formattedspell."</debug>\n";
+	}
+	if ($debug > 0) {
+	    print STDOUT "<debug>zfs send invocation took ".(time() - $startedat)." seconds</debug>\n";
+	}
+	return 0;
+
+    } else {
+	if (!defined($remotedcip)) {
+	    $errormessage = "remote dc ip not supplied.";
+	} else {
+	    if (!defined($remotedataset)) {
+		$errormessage = "remote dataset not supplied.";
+	    } else {
+		if (!defined($startsnapshot)) {
+		    $errormessage = "start snapshot not supplied.";
+		} else {
+		    $errormessage = "end snapshot not supplied.";
+		}
+	    }
+	}
+	return 1;
+    }
+}
+
+$SIG{'CHLD'} = sub {
+    my $pid;
+
+    # don't change $! and $? outside handler
+    local ($!, $?);
+    while (($pid = waitpid(-1, WNOHANG)) > 0 ) {
+	delete $children{$pid};
+    };
+};
+
+$0 = "$pname [handling zfs api call]";
+
+print STDOUT "Content-Type: text/xml;\n";
+print STDOUT "\n";
+
+# parsing REQUEST_URI
+@request = split(/[\?\&]/, $ENV{'REQUEST_URI'});
+$i = 0;
+while ($i < @request) {
+    chomp($request[$i]);
+    if ($request[$i] =~ "^action") {
+	@tmp = split(/=/, $request[$i]);
+	if (defined($tmp[1])) {
+	    $action = $tmp[1];
+	} else {
+	    $action = "null";
+	}
+    }
+    if ($request[$i] =~ "^snapsource") {
+	@tmp = split(/=/, $request[$i]);
+	if (defined($tmp[1])) {
+	    $snapsource = $tmp[1];
+	} else {
+	    $snapsource = "null";
+	}
+    }
+    if ($request[$i] =~ "^snapname") {
+	@tmp = split(/=/, $request[$i]);
+	if (defined($tmp[1])) {
+	    $snapname = $tmp[1];
+	} else {
+	    $snapname = "null";
+	}
+    }
+    if ($request[$i] =~ "^bookmarkname") {
+	@tmp = split(/=/, $request[$i]);
+	if (defined($tmp[1])) {
+	    $bookmarkname = $tmp[1];
+	} else {
+	    $bookmarkname = "null";
+	}
+    }
+    if ($request[$i] =~ "^victim") {
+	@tmp = split(/=/, $request[$i]);
+	if (defined($tmp[1])) {
+	    $victim = $tmp[1];
+	} else {
+	    $victim = "null";
+	}
+    }
+    if ($request[$i] =~ "^clonesource") {
+	@tmp = split(/=/, $request[$i]);
+	if (defined($tmp[1])) {
+	    $clonesource = $tmp[1];
+	} else {
+	    $clonesource = "null";
+	}
+    }
+    if ($request[$i] =~ "^clonename") {
+	@tmp = split(/=/, $request[$i]);
+	if (defined($tmp[1])) {
+	    $clonename = $tmp[1];
+	} else {
+	    $clonename = "null";
+	}
+    }
+    if ($request[$i] =~ "targetname") {
+	@tmp = split(/=/, $request[$i]);
+	if (defined($tmp[1])) {
+	    $targetname = $tmp[1];
+	} else {
+	    $targetname = "null";
+	}
+    }
+    if ($request[$i] =~ "device") {
+	@tmp = split(/=/, $request[$i]);
+	if (defined($tmp[1])) {
+	    $device = $tmp[1];
+	} else {
+	    $device = "null";
+	}
+    }
+    if ($request[$i] =~ "lun") {
+	@tmp = split(/=/, $request[$i]);
+	if (defined($tmp[1])) {
+	    $lun = $tmp[1];
+	} else {
+	    $lun = "null";
+	}
+    }
+    if ($request[$i] =~ "remotedcip") {
+	@tmp = split(/=/, $request[$i]);
+	if (defined($tmp[1])) {
+	    $remotedcip = $tmp[1];
+	} else {
+	    $remotedcip = "null";
+	}
+    }
+    if ($request[$i] =~ "remotedataset") {
+	@tmp = split(/=/, $request[$i]);
+	if (defined($tmp[1])) {
+	    $remotedataset = $tmp[1];
+	} else {
+	    $remotedataset = "null";
+	}
+    }
+    if ($request[$i] =~ "startsnapshot") {
+	@tmp = split(/=/, $request[$i]);
+	if (defined($tmp[1])) {
+	    $startsnapshot = $tmp[1];
+	} else {
+	    $startsnapshot = "null";
+	}
+    }
+    if ($request[$i] =~ "endsnapshot") {
+	@tmp = split(/=/, $request[$i]);
+	if (defined($tmp[1])) {
+	    $endsnapshot = $tmp[1];
+	} else {
+	    $endsnapshot = "null";
+	}
+    }
+    $i++;
+}
+
 getxmlhead();
 print STDOUT "<action>", $action, "</action>\n";
 ACTION:
@@ -694,6 +1188,13 @@ ACTION:
 	    print STDOUT "<snapsource>", $snapsource, "</snapsource>\n";
 	    print STDOUT "<snapname>", $snapname, "</snapname>\n";
 	    $result = getsnapshot();
+	    handleresult();
+	    last ACTION;
+	}
+	if (/^bookmark/) {
+	    print STDOUT "<snapsource>", $snapsource, "</snapsource>\n";
+	    print STDOUT "<bookmarkname>", $snapname, "</bookmarkname>\n";
+	    $result = getbookmark();
 	    handleresult();
 	    last ACTION;
 	}
@@ -773,6 +1274,53 @@ ACTION:
 	    $result = getreload();
 	    if ($result == 0) {
 		print STDOUT "<status>success</status>\n";
+	    } else {
+		print STDOUT "<status>error</status>\n";
+		print STDOUT "<errormessage>".$errormessage."</errormessage>\n";
+	    }
+	    last ACTION;
+	}
+	if (/^send$/) {
+	    print STDOUT "<startsnapshot>", $startsnapshot, "</startsnapshot>\n";
+	    print STDOUT "<endsnapshot>", $endsnapshot, "</endsnapshot>\n";
+	    print STDOUT "<remotedcip>", $remotedcip, "</remotedcip>\n";
+	    print STDOUT "<remotedataset>", $remotedataset, "</remotedataset>\n";
+	    $result = senddelta();
+	    if ($result == 0) {
+		print STDOUT "<status>success</status>\n";
+	    } else {
+		print STDOUT "<status>error</status>\n";
+		print STDOUT "<errormessage>".$errormessage."</errormessage>\n";
+	    }
+	    last ACTION;
+	}
+	if (/^sendlist/) {
+	    $result = getsendingstatus();
+	    if ($result != -1) {
+		print STDOUT "<status>success</status>\n";
+		print STDOUT "<sendingprocesses>".$result."</sendingprocesses>\n";
+	    } else {
+		print STDOUT "<status>error</status>\n";
+		print STDOUT "<errormessage>".$errormessage."</errormessage>\n";
+	    }
+	    last ACTION;
+	}
+	if (/^senddetails/) {
+	    $result = getsendingdetails();
+	    if ($result != -1) {
+		print STDOUT "<status>success</status>\n";
+		print STDOUT "<sendingprocesses>".$result."</sendingprocesses>\n";
+	    } else {
+		print STDOUT "<status>error</status>\n";
+		print STDOUT "<errormessage>".$errormessage."</errormessage>\n";
+	    }
+	    last ACTION;
+	}
+	if (/^receivelist/) {
+	    $result = getreceivingstatus();
+	    if ($result != -1) {
+		print STDOUT "<status>success</status>\n";
+		print STDOUT "<active>".$result."</active>\n";
 	    } else {
 		print STDOUT "<status>error</status>\n";
 		print STDOUT "<errormessage>".$errormessage."</errormessage>\n";
