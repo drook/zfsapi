@@ -42,7 +42,7 @@ my $sudopath = "/usr/local/bin/sudo";
 my $tmppath = "/tmp";
 my $loglocation = "/var/log/zfsreplica";
 # debug: 0 - none, 1 - basic, 2 - extensive
-my $debug = 1;
+my $debug = 0;
 my %children;
 
 my $psgiresult = "";
