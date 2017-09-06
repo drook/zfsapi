@@ -4,11 +4,9 @@ use strict;
 use English;
 use v5.14;
 use Data::UUID;
-use POSIX 'setsid';
-use POSIX ":sys_wait_h";
 
 #-----------------------------
-my $version = "2.0.2";
+my $version = "2.0.3";
 my $i;
 my $action = "null";
 my $snapsource = "null";
