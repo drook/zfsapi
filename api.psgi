@@ -8,7 +8,7 @@ use POSIX 'setsid';
 use POSIX ":sys_wait_h";
 
 #-----------------------------
-my $version = "1.5.0";
+my $version = "2.0";
 my $pname = "zfsapi";
 my $i;
 my $action = "null";
