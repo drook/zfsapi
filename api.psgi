@@ -8,7 +8,7 @@ use POSIX 'setsid';
 use POSIX ":sys_wait_h";
 
 #-----------------------------
-my $version = "2.0";
+my $version = "2.0.1";
 my $pname = "zfsapi";
 my $i;
 my $action = "null";
@@ -1060,7 +1060,24 @@ uwsgi::spooler(
 );
 
 $app = sub {
+    # zeroing everything
     $psgiresult = "";
+    $action = "null";
+    $snapsource = "null";
+    $snapsourcefmt;
+    $snapname = "null";
+    $bookmarkname = "null";
+    $victim = "null";
+    $clonesource = "null";
+    $clonesourcefmt;
+    $clonename = "null";
+    $clonenamefmt;
+    $victim = "null";
+    $victimfmt;
+    $targetname = "null";
+    $device = "null";
+    $lun = "null";
+
     # parsing REQUEST_URI
     $env = shift;
     @request = split(/[\?\&]/, $env -> {'REQUEST_URI'});
