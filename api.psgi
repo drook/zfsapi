@@ -8,8 +8,7 @@ use POSIX 'setsid';
 use POSIX ":sys_wait_h";
 
 #-----------------------------
-my $version = "2.0.1";
-my $pname = "zfsapi";
+my $version = "2.0.2";
 my $i;
 my $action = "null";
 my $snapsource = "null";
@@ -1002,26 +1001,9 @@ sub senddelta() {
 	}
 	$startedat = time();
 
-	#$spell = "sleep 20 &";
 	$spell = "/usr/local/bin/sudo zfs send -vi ".$startsnapshot." ".$endsnapshot." 2>>".$logpath." | ssh ".$remotedcip." sudo zfs receive -d ".$remotedataset." &";
 
 	uwsgi::spool({spell => $spell});
-
-	#$pid = fork();
-	#if (defined($pid)) {
-	#    if ($pid == 0) {
-	#	# we're in the child
-	#	$0 = "$pname [sending zfs data]";
-	#	system($spell);
-	#	exit(0);
-	#    } else {
-	#	# we're in parent
-	#	$children{$pid}=1;
-	#    }
-	#} else {
-	#    $errormessage = "Forking failed.";
-	#    return 1;
-	#}
 
 	if ($debug > 0) {
 	    $formattedspell = $spell;
