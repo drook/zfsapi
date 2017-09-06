@@ -6,7 +6,7 @@ use v5.14;
 use Data::UUID;
 
 #-----------------------------
-my $version = "2.0.3";
+my $version = "2.0.4";
 my $i;
 my $action = "null";
 my $snapsource = "null";
@@ -265,9 +265,9 @@ sub getrelease() {
 	    }
 	    $ctladmlines++;
 	}
+	close(CTLADMLOG);
 	if ($debug == 0) {
 	    unlink($logpath);
-	    close(CTLADMLOG);
 	    unlink($ctladmlogpath);
 	}
 	if (@logcontents == 1 && $logcontents[0] =~ /LUN \d+ removed successfully/) {
@@ -337,9 +337,9 @@ sub gettargetinfo() {
 	    }
 	    $ctladmlines++;
 	}
+	close(CTLADMLOG);
 	if ($debug == 0) {
 	    unlink($logpath);
-	    close(CTLADMLOG);
 	    unlink($ctladmlogpath);
 	}
 
@@ -439,6 +439,7 @@ sub enabletarget() {
 	    $psgiresult .= "<debug>returning 0</debug>\n";
 	}
 	if ($debug == 0) {
+	    unlink($ctlconfpath);
 	    unlink($logpath);
 	}
 	if ($targetfound > 0) {
@@ -507,6 +508,7 @@ sub disabletarget() {
 	$spell = $sudopath." /bin/mv ".$ctlconfpath.".new /etc/ctl.conf";
 	system($spell);
 	if ($debug == 0) {
+	    unlink($ctlconfpath);
 	    unlink($logpath);
         }
 	if ($targetfound > 0) {
@@ -585,6 +587,7 @@ sub mounttarget() {
 	$spell = $sudopath." /bin/mv ".$ctlconfpath.".new /etc/ctl.conf";
 	system($spell);
 	if ($debug == 0) {
+	    unlink($ctlconfpath);
 	    unlink($logpath);
 	}
 	if ($targetmodified > 0) {
@@ -677,6 +680,9 @@ sub getsendingdetails() {
 	    $linecount++;
 	}
 	close(LOG);
+	if ($debug == 0) {
+	    unlink($logpath);
+	}
 
 	if ($linecount > 1) {
 	    $errormessage = "log lines number is greater than one.";
@@ -704,6 +710,9 @@ sub getsendingdetails() {
 		    $linecount++;
 		}
 		close(SPELLLOG);
+		if ($debug == 0) {
+		    unlink($logpath);
+		}
 	    } else {
 		$errormessage = "cannot open file for reading: ".$logpath;
 		return -1;
@@ -774,6 +783,9 @@ sub getsendingstatus() {
 	    $linecount++;
 	}
 	close(LOG);
+	if ($debug == 0) {
+	    unlink($logpath);
+	}
 	if ($linecount > 1) {
 	    $errormessage = "log lines number is greater than one.";
 	    return -1;
@@ -809,6 +821,9 @@ sub getreceivingstatus() {
         $linecount++;
     }
     close(LOG);
+    if ($debug == 0) {
+	unlink($logpath);
+    }
     if ($linecount > 1) {
         $errormessage = "log lines number is greater than one.";
         return -1;
@@ -891,6 +906,9 @@ sub senddelta() {
 	    }
 	}
 	close(LOG);
+	if ($debug == 0) {
+	    unlink($logpath);
+	}
 	if ($debug > 1) {
 	    $psgiresult .= "</debug>\n";
 	}
@@ -958,6 +976,9 @@ sub senddelta() {
 	    }
 	}
 	close(LOG);
+	if ($debug == 0) {
+	    unlink($logpath);
+	}
 	if ($debug > 1) {
 		$psgiresult .= "</debug>\n";
 	}
