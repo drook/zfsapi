@@ -47,21 +47,25 @@ my $loglocation = "/var/log/zfsreplica";
 # debug: 0 - none, 1 - basic, 2 - extensive
 my $debug = 1;
 my %children;
+
+my $psgiresult = "";
+my $app;
+my $env;
 #-----------------------------
 
 sub getxmlhead(){
-    print STDOUT "<?xml version=\"1.0\"?>\n";
-    print STDOUT "<response>\n";
+    $psgiresult .= "<?xml version=\"1.0\"?>\n";
+    $psgiresult .= "<response>\n";
 };
 
 sub getxmlfoot(){
-    print STDOUT "</response>\n";
+    $psgiresult .= "</response>\n";
 };
 
 sub dumpall() {
     $i = 0;
     foreach $i(keys(%ENV)) {
-	print STDOUT "<env>", $i, ": ", $ENV{$i}, "</env>\n";
+	$psgiresult .= "<env>".$i.": ".$ENV{$i}."</env>\n";
     }
 }
 
@@ -255,7 +259,7 @@ sub getrelease() {
 			$logpath = $tmppath."/release-".$victimfmt."-".$time[5]."-".$time[4]."-".$time[3]."-".$time[2]."-".$time[1]."-".$time[0].".log";
 			$spell = $sudopath." /usr/sbin/ctladm remove -b block -l ".$blockdev." >".$logpath." 2>&1";
 			if ($debug > 0) {
-			    print STDOUT "<debug>".formatspell($spell)."</debug>\n";
+			    $psgiresult .= "<debug>".formatspell($spell)."</debug>\n";
 			}
 			system($spell);
 			parselog();
@@ -435,7 +439,7 @@ sub enabletarget() {
 	$spell = $sudopath." /bin/mv ".$ctlconfpath.".new /etc/ctl.conf";
 	system($spell);
 	if ($debug > 0) {
-	    print STDOUT "<debug>returning 0</debug>\n";
+	    $psgiresult .= "<debug>returning 0</debug>\n";
 	}
 	if ($debug == 0) {
 	    unlink($logpath);
@@ -474,8 +478,8 @@ sub disabletarget() {
 	    if ($line =~ /^[\s\t]*target $targetname[\s\t]*\{/) {
 		$bracketcount++;
 		$targetfound = 1;
-		#print STDOUT "<debug>BRACKETCOUNT UP: ".$bracketcount."</debug>\n";
-		#print STDOUT "<debug># ".$line."</debug>\n";
+		#$psgiresult .= "<debug>BRACKETCOUNT UP: ".$bracketcount."</debug>\n";
+		#$psgiresult .= "<debug># ".$line."</debug>\n";
 		print CTLCONFNEW "#", $line, "\n";
 	    } else {
 		if ($line =~ /^\#[\s\t]*target $targetname[\s\t]*\{/) {
@@ -485,16 +489,16 @@ sub disabletarget() {
 		if ($bracketcount > 0) {
 		    if ($line =~ /.*\}/) {
 			$bracketcount--;
-			#print STDOUT "<debug>BRACKETCOUNT DOWN: ".$bracketcount."</debug>\n";
+			#$psgiresult .= "<debug>BRACKETCOUNT DOWN: ".$bracketcount."</debug>\n";
 		    }
 		    if ($line =~ /.*\{/) {
 			$bracketcount++;
-			#print STDOUT "<debug>BRACKETCOUNT UP: ".$bracketcount."</debug>\n";
+			#$psgiresult .= "<debug>BRACKETCOUNT UP: ".$bracketcount."</debug>\n";
 		    }
-		    #print STDOUT "<debug># ".$line."</debug>\n";
+		    #$psgiresult .= "<debug># ".$line."</debug>\n";
 		    print CTLCONFNEW "#", $line, "\n";
 		} else {
-		    #print STDOUT "<debug>NOMOD ".$line."</debug>\n";
+		    #$psgiresult .= "<debug>NOMOD ".$line."</debug>\n";
 		    print CTLCONFNEW $line, "\n";
 		}
 	    }
@@ -510,7 +514,7 @@ sub disabletarget() {
         }
 	if ($targetfound > 0) {
 	    if ($debug > 0) {
-		print STDOUT "<debug>returning 0</debug>\n";
+		$psgiresult .= "<debug>returning 0</debug>\n";
 	    }
 	    return 0;
 	} else {
@@ -588,12 +592,12 @@ sub mounttarget() {
 	}
 	if ($targetmodified > 0) {
 	    if ($debug > 0) {
-		print STDOUT "<debug>returning 0</debug>\n";
+		$psgiresult .= "<debug>returning 0</debug>\n";
 	    }
 	    return 0;
 	} else {
 	    if ($debug < 0) {
-		print STDOUT "<debug>returning 1</debug>\n";
+		$psgiresult .= "<debug>returning 1</debug>\n";
 	    }
 	    return 1;
 	}
@@ -604,45 +608,45 @@ sub mounttarget() {
 
 sub handleresult() {
     if ($result == 0) {
-        print STDOUT "<status>success</status>\n";
+        $psgiresult .= "<status>success</status>\n";
     } else {
-        print STDOUT "<status>error</status>\n";
-	print STDOUT "<errormessage>".$errormessage."</errormessage>\n";
-	print STDOUT "<log>\n";
+        $psgiresult .= "<status>error</status>\n";
+	$psgiresult .= "<errormessage>".$errormessage."</errormessage>\n";
+	$psgiresult .= "<log>\n";
 	$i = 0;
 	while ($i < @logcontents) {
-	    print STDOUT "<entry>".$logcontents[$i]."</entry>\n";
+	    $psgiresult .= "<entry>".$logcontents[$i]."</entry>\n";
 	    $i++
 	}
-	print STDOUT "</log>\n";
+	$psgiresult .= "</log>\n";
     }
 }
 
 sub handlestatus {
     if ($result == 0) {
-        print STDOUT "<status>success</status>\n";
+        $psgiresult .= "<status>success</status>\n";
     } else {
-        print STDOUT "<status>error</status>\n";
-	print STDOUT "<errormessage>".$errormessage."</errormessage>\n";
+        $psgiresult .= "<status>error</status>\n";
+	$psgiresult .= "<errormessage>".$errormessage."</errormessage>\n";
     }
-    print STDOUT "<log>\n";
+    $psgiresult .= "<log>\n";
     $i = 0;
     while ($i < @logcontents) {
 	if ($logcontents[$i] =~ /^NAME/) {
 	} else {
-	    #print STDOUT "<raw>", $logcontents[$i], "</raw>";
+	    #$psgiresult .= "<raw>".$logcontents[$i]."</raw>";
 	    @tmp = split(/[\s\t]+/, $logcontents[$i]);
-	    print STDOUT "<zfsentity>\n";
-	    print STDOUT "<name>", $tmp[0], "</name>\n";
-	    print STDOUT "<used>", $tmp[1], "</used>\n";
-	    print STDOUT "<avail>", $tmp[2], "</avail>\n";
-	    print STDOUT "<refer>", $tmp[3], "</refer>\n";
-	    print STDOUT "<mountpoint>", $tmp[4], "</mountpoint>\n";
-	    print STDOUT "</zfsentity>\n";
+	    $psgiresult .= "<zfsentity>\n";
+	    $psgiresult .= "<name>".$tmp[0]."</name>\n";
+	    $psgiresult .= "<used>".$tmp[1]."</used>\n";
+	    $psgiresult .= "<avail>".$tmp[2]."</avail>\n";
+	    $psgiresult .= "<refer>".$tmp[3]."</refer>\n";
+	    $psgiresult .= "<mountpoint>".$tmp[4]."</mountpoint>\n";
+	    $psgiresult .= "</zfsentity>\n";
 	}
         $i++
     }
-    print STDOUT "</log>\n";
+    $psgiresult .= "</log>\n";
 }
 
 sub getsendingdetails() {
@@ -666,7 +670,7 @@ sub getsendingdetails() {
 
 	$spell = "ps awwwwx | grep zfs\\ send | grep @".$startsnapshot." | grep @".$endsnapshot." | egrep -v 'sudo|grep' | wc -l | tr -d ' ' >".$logpath;
 	if ($debug > 0) {
-	    print STDOUT "<debug><spell>".$spell."</spell></debug>"
+	    $psgiresult .= "<debug><spell>".$spell."</spell></debug>"
 	}
 	system($spell);
 	open(LOG, "<".$logpath);
@@ -681,7 +685,7 @@ sub getsendingdetails() {
 	    $errormessage = "log lines number is greater than one.";
 	    return -1;
 	} else {
-	    print STDOUT "<active>".$line."</active>";
+	    $psgiresult .= "<active>".$line."</active>";
 	    $uuid = $ug -> create_str();
 	    $logpath = "/tmp/zfs-send-details-ps-".$uuid.".log";
 	    $lognamestart = "zfs-send-".$remotedcip;
@@ -695,7 +699,7 @@ sub getsendingdetails() {
 		    $line = readline(SPELLLOG);
 		    chomp($line);
 		    if ($debug > 1) {
-			print STDOUT "<debug><rawline>".$line."</rawline></debug>"
+			$psgiresult .= "<debug><rawline>".$line."</rawline></debug>"
 		    }
 		    chomp($line);
 		    @tmp = split(/[\s\t]+/, $line);
@@ -709,7 +713,7 @@ sub getsendingdetails() {
 	    }
 
 	    if ($debug > 0) {
-		print STDOUT "<debug><sendlogpath>".$loglocation."/".$sendlogpath."</sendlogpath></debug>"
+		$psgiresult .= "<debug><sendlogpath>".$loglocation."/".$sendlogpath."</sendlogpath></debug>"
 	    }
 
 	    $rs = open(SENDLOG, "<".$loglocation."/".$sendlogpath);
@@ -718,7 +722,7 @@ sub getsendingdetails() {
 		    $line = readline(SENDLOG);
 		    chomp($line);
 		    if ($debug > 1) {
-			print STDOUT "<debug><rawline>".$line."</rawline></debug>"
+			$psgiresult .= "<debug><rawline>".$line."</rawline></debug>"
 		    }
 		    if ($line =~ /total estimated size is/) {
 			@tmp = split(/[\s\t]+/, $line);
@@ -797,7 +801,7 @@ sub getreceivingstatus() {
 
     $spell = "ps ax | grep zfs\\ receive | egrep -v 'grep|ssh' | wc -l | tr -d ' ' >".$logpath;
     if ($debug > 0) {
-	print STDOUT "<debug>spell: ".$spell."</debug>"
+	$psgiresult .= "<debug>spell: ".$spell."</debug>"
 	
     }
     system($spell);
@@ -851,54 +855,54 @@ sub senddelta() {
 	system($spell);
 	open(LOG, "<".$logpath);
 	if ($debug > 1) {
-		print STDOUT "<debug>\n";
+		$psgiresult .= "<debug>\n";
 	}
 	while (!eof(LOG) && ($firstsnapexists == 0 || $secondsnapexists == 0)) {
 	    if ($debug > 1) {
-	        print STDOUT "<firstsnapexists>".$firstsnapexists."</firstsnapexists>\n";
-	        print STDOUT "<secondsnapexists>".$secondsnapexists."</secondsnapexists>\n";
+	        $psgiresult .= "<firstsnapexists>".$firstsnapexists."</firstsnapexists>\n";
+	        $psgiresult .= "<secondsnapexists>".$secondsnapexists."</secondsnapexists>\n";
 	    }
 	    $line = readline(LOG);
 	    chomp($line);
 	    @tmp = split(/[\s\t]+/, $line);
 	    if ($debug > 1) {
-		print STDOUT "<line>".$tmp[0]."</line>\n";
+		$psgiresult .= "<line>".$tmp[0]."</line>\n";
 	    }
 	    if ($tmp[0] eq $startsnapshot) {
 		if ($debug > 1) {
-		    print STDOUT "<startercondition>matched</startercondition>\n";
+		    $psgiresult .= "<startercondition>matched</startercondition>\n";
 		}
 		$firstsnapexists = 1;
 	    } else {
 		if ($debug > 1) {
-		    print STDOUT "<startercondition>not matched</startercondition>\n";
+		    $psgiresult .= "<startercondition>not matched</startercondition>\n";
 		}
 		if ($debug > 1) {
-		    print STDOUT "<comparsion>".$tmp[0]." doesn't match the ".$startsnapshot."</comparsion>\n";
+		    $psgiresult .= "<comparsion>".$tmp[0]." doesn't match the ".$startsnapshot."</comparsion>\n";
 		}
 		if ($tmp[0] eq $endsnapshot) {
 		    if ($debug > 1) {
-			print STDOUT "<endcondition>matched</endcondition>\n";
+			$psgiresult .= "<endcondition>matched</endcondition>\n";
 		    }
 		    $secondsnapexists = 1;
 		} else {
 		    if ($debug > 1) {
-			print STDOUT "<endcondition>not matched</endcondition>\n";
-			print STDOUT "<comparsion>".$tmp[0]." doesn't match the ".$endsnapshot."</comparsion>\n";
+			$psgiresult .= "<endcondition>not matched</endcondition>\n";
+			$psgiresult .= "<comparsion>".$tmp[0]." doesn't match the ".$endsnapshot."</comparsion>\n";
 		    }
 		}
 	    }
 	}
 	close(LOG);
 	if ($debug > 1) {
-	    print STDOUT "</debug>\n";
+	    $psgiresult .= "</debug>\n";
 	}
 
 	if ($debug > 0) {
-	    print STDOUT "<debug>\n";
-	    print STDOUT "<firstsnapexists>".$firstsnapexists."</firstsnapexists>\n";
-	    print STDOUT "<secondsnapexists>".$secondsnapexists."</secondsnapexists>\n";
-	    print STDOUT "</debug>\n";
+	    $psgiresult .= "<debug>\n";
+	    $psgiresult .= "<firstsnapexists>".$firstsnapexists."</firstsnapexists>\n";
+	    $psgiresult .= "<secondsnapexists>".$secondsnapexists."</secondsnapexists>\n";
+	    $psgiresult .= "</debug>\n";
 	}
 	# if they don't exist - then bail out
 	if ($firstsnapexists == 0 || $secondsnapexists == 0) {
@@ -918,10 +922,10 @@ sub senddelta() {
 	$elementcount = scalar(@tmp);
 	$remoteendsnapshot = $remotedataset."/".$tmp[$elementcount - 2]."@".$tmp[$elementcount - 1];
 	if ($debug > 0) {
-	    print STDOUT "<debug>\n";
-	    print STDOUT "<remotestartsnapshot>".$remotestartsnapshot."</remotestartsnapshot>\n";
-	    print STDOUT "<remoteendsnapshot>".$remoteendsnapshot."</remoteendsnapshot>\n";
-	    print STDOUT "</debug>\n";
+	    $psgiresult .= "<debug>\n";
+	    $psgiresult .= "<remotestartsnapshot>".$remotestartsnapshot."</remotestartsnapshot>\n";
+	    $psgiresult .= "<remoteendsnapshot>".$remoteendsnapshot."</remoteendsnapshot>\n";
+	    $psgiresult .= "</debug>\n";
 	}
 	$logpath = "/tmp/zfs-list-".$remotedcip.".log.".$uuid;
 	$spell = "ssh ".$remotedcip." zfs list -t snapshot >".$logpath;
@@ -929,7 +933,7 @@ sub senddelta() {
 	$firstsnapexists = 0;
 	$secondsnapexists = 0;
 	if ($debug > 1) {
-		print STDOUT "<debug>\n";
+		$psgiresult .= "<debug>\n";
 	}
 	open(LOG, "<".$logpath);
 	while (!eof(LOG) && ($firstsnapexists == 0 || $secondsnapexists == 0)) {
@@ -937,20 +941,20 @@ sub senddelta() {
 	    chomp($line);
 	    @tmp = split(/[\s\t]+/, $line);
 	    if ($debug > 1) {
-		print STDOUT "<line>".$tmp[0]."</line>\n";
+		$psgiresult .= "<line>".$tmp[0]."</line>\n";
 	    }
 	    if ($tmp[0] eq $remotestartsnapshot) {
 		if ($debug > 1) {
-		    print STDOUT "<startercondition>matched</startercondition>\n";
+		    $psgiresult .= "<startercondition>matched</startercondition>\n";
 		}
 		$firstsnapexists = 1;
 	    } else {
 		if ($debug > 1) {
-		    print STDOUT "<startercondition>not matched</startercondition>\n";
+		    $psgiresult .= "<startercondition>not matched</startercondition>\n";
 		}
 		if ($tmp[0] eq $remoteendsnapshot) {
 		    if ($debug > 1) {
-			print STDOUT "<endcondition>matched</endcondition>\n";
+			$psgiresult .= "<endcondition>matched</endcondition>\n";
 		    }
 		    $secondsnapexists = 1;
 		}
@@ -958,10 +962,10 @@ sub senddelta() {
 	}
 	close(LOG);
 	if ($debug > 1) {
-		print STDOUT "</debug>\n";
+		$psgiresult .= "</debug>\n";
 	}
 	if ($debug > 0) {
-	    print STDOUT "<debug>pre-send checks took ".(time() - $startedat)." seconds</debug>\n";
+	    $psgiresult .= "<debug>pre-send checks took ".(time() - $startedat)." seconds</debug>\n";
 	}
 
 	# if first snapshot doesn't exist on the remote - then bail out
@@ -988,18 +992,20 @@ sub senddelta() {
 	$endsnapshotescaped =~ s/\//--/g;
 	$logpath = $loglocation."/zfs-send-".$remotedcip."-".$startsnapshotescaped."-".$endsnapshotescaped.".log";
 	if ($debug > 0) {
-	    print STDOUT "<debug>\n";
-	    print STDOUT "<firstsnapexistsonremote>".$firstsnapexists."</firstsnapexistsonremote>\n";
-	    print STDOUT "<secondsnapexistsonremote>".$secondsnapexists."</secondsnapexistsonremote>\n";
+	    $psgiresult .= "<debug>\n";
+	    $psgiresult .= "<firstsnapexistsonremote>".$firstsnapexists."</firstsnapexistsonremote>\n";
+	    $psgiresult .= "<secondsnapexistsonremote>".$secondsnapexists."</secondsnapexistsonremote>\n";
 
-	    print STDOUT "<debug>okay to send the delta.</debug>\n";
-	    print STDOUT "<logpath>".$logpath."</logpath>\n";
-	    print STDOUT "</debug>\n";
+	    $psgiresult .= "<debug>okay to send the delta.</debug>\n";
+	    $psgiresult .= "<logpath>".$logpath."</logpath>\n";
+	    $psgiresult .= "</debug>\n";
 	}
 	$startedat = time();
 
+	#$spell = "sleep 20 &";
 	$spell = "/usr/local/bin/sudo zfs send -vi ".$startsnapshot." ".$endsnapshot." 2>>".$logpath." | ssh ".$remotedcip." sudo zfs receive -d ".$remotedataset." &";
-	system($spell);
+
+	uwsgi::spool({spell => $spell});
 
 	#$pid = fork();
 	#if (defined($pid)) {
@@ -1020,10 +1026,10 @@ sub senddelta() {
 	if ($debug > 0) {
 	    $formattedspell = $spell;
 	    $formattedspell =~ s/&/&amp;/g;
-	    print STDOUT "<debug>replication spell: ".$formattedspell."</debug>\n";
+	    $psgiresult .= "<debug>replication spell: ".$formattedspell."</debug>\n";
 	}
 	if ($debug > 0) {
-	    print STDOUT "<debug>zfs send invocation took ".(time() - $startedat)." seconds</debug>\n";
+	    $psgiresult .= "<debug>zfs send invocation took ".(time() - $startedat)." seconds</debug>\n";
 	}
 	return 0;
 
@@ -1045,306 +1051,309 @@ sub senddelta() {
     }
 }
 
-$SIG{'CHLD'} = sub {
-    my $pid;
+uwsgi::spooler(
+    sub {
+        my ($env) = @_;
+        system($env->{'spell'});
+        return uwsgi::SPOOL_OK;
+    }
+);
 
-    # don't change $! and $? outside handler
-    local ($!, $?);
-    while (($pid = waitpid(-1, WNOHANG)) > 0 ) {
-	delete $children{$pid};
-    };
-};
-
-$0 = "$pname [handling zfs api call]";
-
-print STDOUT "Content-Type: text/xml;\n";
-print STDOUT "\n";
-
-# parsing REQUEST_URI
-@request = split(/[\?\&]/, $ENV{'REQUEST_URI'});
-$i = 0;
-while ($i < @request) {
-    chomp($request[$i]);
-    if ($request[$i] =~ "^action") {
-	@tmp = split(/=/, $request[$i]);
-	if (defined($tmp[1])) {
-	    $action = $tmp[1];
-	} else {
-	    $action = "null";
-	}
-    }
-    if ($request[$i] =~ "^snapsource") {
-	@tmp = split(/=/, $request[$i]);
-	if (defined($tmp[1])) {
-	    $snapsource = $tmp[1];
-	} else {
-	    $snapsource = "null";
-	}
-    }
-    if ($request[$i] =~ "^snapname") {
-	@tmp = split(/=/, $request[$i]);
-	if (defined($tmp[1])) {
-	    $snapname = $tmp[1];
-	} else {
-	    $snapname = "null";
-	}
-    }
-    if ($request[$i] =~ "^bookmarkname") {
-	@tmp = split(/=/, $request[$i]);
-	if (defined($tmp[1])) {
-	    $bookmarkname = $tmp[1];
-	} else {
-	    $bookmarkname = "null";
-	}
-    }
-    if ($request[$i] =~ "^victim") {
-	@tmp = split(/=/, $request[$i]);
-	if (defined($tmp[1])) {
-	    $victim = $tmp[1];
-	} else {
-	    $victim = "null";
-	}
-    }
-    if ($request[$i] =~ "^clonesource") {
-	@tmp = split(/=/, $request[$i]);
-	if (defined($tmp[1])) {
-	    $clonesource = $tmp[1];
-	} else {
-	    $clonesource = "null";
-	}
-    }
-    if ($request[$i] =~ "^clonename") {
-	@tmp = split(/=/, $request[$i]);
-	if (defined($tmp[1])) {
-	    $clonename = $tmp[1];
-	} else {
-	    $clonename = "null";
-	}
-    }
-    if ($request[$i] =~ "targetname") {
-	@tmp = split(/=/, $request[$i]);
-	if (defined($tmp[1])) {
-	    $targetname = $tmp[1];
-	} else {
-	    $targetname = "null";
-	}
-    }
-    if ($request[$i] =~ "device") {
-	@tmp = split(/=/, $request[$i]);
-	if (defined($tmp[1])) {
-	    $device = $tmp[1];
-	} else {
-	    $device = "null";
-	}
-    }
-    if ($request[$i] =~ "lun") {
-	@tmp = split(/=/, $request[$i]);
-	if (defined($tmp[1])) {
-	    $lun = $tmp[1];
-	} else {
-	    $lun = "null";
-	}
-    }
-    if ($request[$i] =~ "remotedcip") {
-	@tmp = split(/=/, $request[$i]);
-	if (defined($tmp[1])) {
-	    $remotedcip = $tmp[1];
-	} else {
-	    $remotedcip = "null";
-	}
-    }
-    if ($request[$i] =~ "remotedataset") {
-	@tmp = split(/=/, $request[$i]);
-	if (defined($tmp[1])) {
-	    $remotedataset = $tmp[1];
-	} else {
-	    $remotedataset = "null";
-	}
-    }
-    if ($request[$i] =~ "startsnapshot") {
-	@tmp = split(/=/, $request[$i]);
-	if (defined($tmp[1])) {
-	    $startsnapshot = $tmp[1];
-	} else {
-	    $startsnapshot = "null";
-	}
-    }
-    if ($request[$i] =~ "endsnapshot") {
-	@tmp = split(/=/, $request[$i]);
-	if (defined($tmp[1])) {
-	    $endsnapshot = $tmp[1];
-	} else {
-	    $endsnapshot = "null";
-	}
-    }
-    $i++;
-}
-
-getxmlhead();
-print STDOUT "<action>", $action, "</action>\n";
-ACTION:
-    for ($action) {
-	if (/^snapshot/) {
-	    print STDOUT "<snapsource>", $snapsource, "</snapsource>\n";
-	    print STDOUT "<snapname>", $snapname, "</snapname>\n";
-	    $result = getsnapshot();
-	    handleresult();
-	    last ACTION;
-	}
-	if (/^bookmark/) {
-	    print STDOUT "<snapsource>", $snapsource, "</snapsource>\n";
-	    print STDOUT "<bookmarkname>", $snapname, "</bookmarkname>\n";
-	    $result = getbookmark();
-	    handleresult();
-	    last ACTION;
-	}
-	if (/^clone/) {
-	    print STDOUT "<clonesource>", $clonesource, "</clonesource>\n";
-	    print STDOUT "<clonename>", $clonename, "</clonename>\n";
-	    $result = getclone();
-	    handleresult();
-	    last ACTION;
-	}
-	if (/^destroy/) {
-	    print STDOUT "<victim>", $victim, "</victim>\n";
-	    $result = destroyentity();
-	    handleresult();
-	    last ACTION;
-	}
-	if (/^status/) {
-	    $result = getstatus();
-	    handlestatus();
-	    last ACTION;
-	}
-	if (/^targetmount/) {
-	    print STDOUT "<targetname>", $targetname, "</targetname>\n";
-	    print STDOUT "<device>", $device, "</device>\n";
-	    print STDOUT "<lun>", $lun, "</lun>\n";
-	    $result = mounttarget();
-	    if ($result == 0) {
-		print STDOUT "<status>success</status>\n";
+$app = sub {
+    $psgiresult = "";
+    # parsing REQUEST_URI
+    $env = shift;
+    @request = split(/[\?\&]/, $env -> {'REQUEST_URI'});
+    $i = 0;
+    while ($i < @request) {
+        chomp($request[$i]);
+        if ($request[$i] =~ "^action") {
+	    @tmp = split(/=/, $request[$i]);
+	    if (defined($tmp[1])) {
+		$action = $tmp[1];
 	    } else {
-		print STDOUT "<status>error</status>\n";
+		$action = "null";
 	    }
-	    last ACTION;
-	}
-	if (/^targetenable/) {
-	    print STDOUT "<targetname>", $targetname, "</targetname>\n";
-	    $result = enabletarget();
-	    if ($result == 0) {
-		print STDOUT "<status>success</status>\n";
+        }
+        if ($request[$i] =~ "^snapsource") {
+	    @tmp = split(/=/, $request[$i]);
+	    if (defined($tmp[1])) {
+		$snapsource = $tmp[1];
 	    } else {
-		print STDOUT "<status>error</status>\n";
-		print STDOUT "<errormessage>".$errormessage."</errormessage>\n";
+		$snapsource = "null";
 	    }
-	    last ACTION;
-	}
-	if (/^targetdisable/) {
-	    print STDOUT "<targetname>", $targetname, "</targetname>\n";
-	    $result = disabletarget();
-	    if ($result == 0) {
-		print STDOUT "<status>success</status>\n";
+        }
+        if ($request[$i] =~ "^snapname") {
+	    @tmp = split(/=/, $request[$i]);
+	    if (defined($tmp[1])) {
+		$snapname = $tmp[1];
 	    } else {
-		print STDOUT "<status>error</status>\n";
-		print STDOUT "<errormessage>".$errormessage."</errormessage>\n";
+		$snapname = "null";
 	    }
-	    last ACTION;
 	}
-	if (/^release/) {
-	    print STDOUT "<victim>", $victim, "</victim>\n";
-	    $result = getrelease();
-	    if ($result == 0) {
-		print STDOUT "<status>success</status>\n";
+	if ($request[$i] =~ "^bookmarkname") {
+	    @tmp = split(/=/, $request[$i]);
+	    if (defined($tmp[1])) {
+		$bookmarkname = $tmp[1];
 	    } else {
-		print STDOUT "<status>error</status>\n";
-		print STDOUT "<errormessage>".$errormessage."</errormessage>\n";
-		if (@logcontents > 0) {
-		    print STDOUT "<log>\n";
-		    $i = 0;
-		    while ($i < @logcontents) {
-			print STDOUT "<entry>".$logcontents[$i]."</entry>\n";
-			$i++
-		    }
-		    print STDOUT "</log>\n";
+		$bookmarkname = "null";
+	    }
+	}
+	if ($request[$i] =~ "^victim") {
+	    @tmp = split(/=/, $request[$i]);
+	    if (defined($tmp[1])) {
+		$victim = $tmp[1];
+	    } else {
+		$victim = "null";
+	    }
+	}
+	if ($request[$i] =~ "^clonesource") {
+	    @tmp = split(/=/, $request[$i]);
+	    if (defined($tmp[1])) {
+	        $clonesource = $tmp[1];
+	    } else {
+		$clonesource = "null";
+	    }
+	}
+        if ($request[$i] =~ "^clonename") {
+	    @tmp = split(/=/, $request[$i]);
+	    if (defined($tmp[1])) {
+		$clonename = $tmp[1];
+	    } else {
+	        $clonename = "null";
+	    }
+	}
+	if ($request[$i] =~ "targetname") {
+	    @tmp = split(/=/, $request[$i]);
+	    if (defined($tmp[1])) {
+		$targetname = $tmp[1];
+	    } else {
+		$targetname = "null";
+	    }
+	}
+	if ($request[$i] =~ "device") {
+	    @tmp = split(/=/, $request[$i]);
+	    if (defined($tmp[1])) {
+		$device = $tmp[1];
+	    } else {
+	        $device = "null";
+	    }
+	}
+	if ($request[$i] =~ "lun") {
+	    @tmp = split(/=/, $request[$i]);
+	    if (defined($tmp[1])) {
+		$lun = $tmp[1];
+	    }  else {
+		$lun = "null";
+	    }
+	}
+	if ($request[$i] =~ "remotedcip") {
+	    @tmp = split(/=/, $request[$i]);
+	    if (defined($tmp[1])) {
+	        $remotedcip = $tmp[1];
+	    } else {
+		$remotedcip = "null";
+	    }
+	}
+	if ($request[$i] =~ "remotedataset") {
+	    @tmp = split(/=/, $request[$i]);
+	    if (defined($tmp[1])) {
+		$remotedataset = $tmp[1];
+	    } else {
+	        $remotedataset = "null";
+	    }
+	}
+	if ($request[$i] =~ "startsnapshot") {
+	    @tmp = split(/=/, $request[$i]);
+	    if (defined($tmp[1])) {
+		$startsnapshot = $tmp[1];
+	    } else {
+		$startsnapshot = "null";
+	    }
+	}
+	if ($request[$i] =~ "endsnapshot") {
+	    @tmp = split(/=/, $request[$i]);
+	    if (defined($tmp[1])) {
+		$endsnapshot = $tmp[1];
+	    } else {
+	        $endsnapshot = "null";
+	    }
+	}
+	$i++;
+    }
+
+    getxmlhead();
+    $psgiresult .= "<action>".$action."</action>\n";
+    ACTION:
+	for ($action) {
+	    if (/^snapshot/) {
+		$psgiresult .= "<snapsource>".$snapsource."</snapsource>\n";
+		$psgiresult .= "<snapname>".$snapname."</snapname>\n";
+		$result = getsnapshot();
+		handleresult();
+		last ACTION;
+	    }
+	    if (/^bookmark/) {
+		$psgiresult .= "<snapsource>".$snapsource."</snapsource>\n";
+		$psgiresult .= "<bookmarkname>".$snapname."</bookmarkname>\n";
+		$result = getbookmark();
+		handleresult();
+		last ACTION;
+	    }
+	    if (/^clone/) {
+		$psgiresult .= "<clonesource>".$clonesource."</clonesource>\n";
+		$psgiresult .= "<clonename>".$clonename."</clonename>\n";
+		$result = getclone();
+		handleresult();
+		last ACTION;
+	    }
+	    if (/^destroy/) {
+		$psgiresult .= "<victim>".$victim."</victim>\n";
+		$result = destroyentity();
+		handleresult();
+		last ACTION;
+	    }
+	    if (/^status/) {
+		$result = getstatus();
+		handlestatus();
+		last ACTION;
+	    }
+	    if (/^targetmount/) {
+		$psgiresult .= "<targetname>".$targetname."</targetname>\n";
+		$psgiresult .= "<device>".$device."</device>\n";
+		$psgiresult .= "<lun>".$lun."</lun>\n";
+		$result = mounttarget();
+		if ($result == 0) {
+		    $psgiresult .= "<status>success</status>\n";
+		} else {
+		    $psgiresult .= "<status>error</status>\n";
 		}
+		last ACTION;
 	    }
-	    last ACTION;
-	}
-	if (/^reload/) {
-	    $result = getreload();
-	    if ($result == 0) {
-		print STDOUT "<status>success</status>\n";
-	    } else {
-		print STDOUT "<status>error</status>\n";
-		print STDOUT "<errormessage>".$errormessage."</errormessage>\n";
+	    if (/^targetenable/) {
+		$psgiresult .= "<targetname>".$targetname."</targetname>\n";
+		$result = enabletarget();
+		if ($result == 0) {
+		    $psgiresult .= "<status>success</status>\n";
+		} else {
+		    $psgiresult .= "<status>error</status>\n";
+		    $psgiresult .= "<errormessage>".$errormessage."</errormessage>\n";
+		}
+		last ACTION;
 	    }
-	    last ACTION;
-	}
-	if (/^send$/) {
-	    print STDOUT "<startsnapshot>", $startsnapshot, "</startsnapshot>\n";
-	    print STDOUT "<endsnapshot>", $endsnapshot, "</endsnapshot>\n";
-	    print STDOUT "<remotedcip>", $remotedcip, "</remotedcip>\n";
-	    print STDOUT "<remotedataset>", $remotedataset, "</remotedataset>\n";
-	    $result = senddelta();
-	    if ($result == 0) {
-		print STDOUT "<status>success</status>\n";
-	    } else {
-		print STDOUT "<status>error</status>\n";
-		print STDOUT "<errormessage>".$errormessage."</errormessage>\n";
+	    if (/^targetdisable/) {
+		$psgiresult .= "<targetname>".$targetname."</targetname>\n";
+		$result = disabletarget();
+		if ($result == 0) {
+		    $psgiresult .= "<status>success</status>\n";
+		} else {
+		    $psgiresult .= "<status>error</status>\n";
+		    $psgiresult .= "<errormessage>".$errormessage."</errormessage>\n";
+		}
+		last ACTION;
 	    }
-	    last ACTION;
-	}
-	if (/^sendlist/) {
-	    $result = getsendingstatus();
-	    if ($result != -1) {
-		print STDOUT "<status>success</status>\n";
-		print STDOUT "<sendingprocesses>".$result."</sendingprocesses>\n";
-	    } else {
-		print STDOUT "<status>error</status>\n";
-		print STDOUT "<errormessage>".$errormessage."</errormessage>\n";
+	    if (/^release/) {
+		$psgiresult .= "<victim>".$victim."</victim>\n";
+		$result = getrelease();
+		if ($result == 0) {
+		    $psgiresult .= "<status>success</status>\n";
+		} else {
+		    $psgiresult .= "<status>error</status>\n";
+		    $psgiresult .= "<errormessage>".$errormessage."</errormessage>\n";
+		    if (@logcontents > 0) {
+			$psgiresult .= "<log>\n";
+			$i = 0;
+			while ($i < @logcontents) {
+			    $psgiresult .= "<entry>".$logcontents[$i]."</entry>\n";
+			    $i++
+			}
+			$psgiresult .= "</log>\n";
+		    }
+		}
+		last ACTION;
 	    }
-	    last ACTION;
-	}
-	if (/^senddetails/) {
-	    $result = getsendingdetails();
-	    if ($result != -1) {
-		print STDOUT "<status>success</status>\n";
-		print STDOUT "<sendingprocesses>".$result."</sendingprocesses>\n";
-	    } else {
-		print STDOUT "<status>error</status>\n";
-		print STDOUT "<errormessage>".$errormessage."</errormessage>\n";
+	    if (/^reload/) {
+		$result = getreload();
+		if ($result == 0) {
+		    $psgiresult .= "<status>success</status>\n";
+		} else {
+		    $psgiresult .= "<status>error</status>\n";
+		    $psgiresult .= "<errormessage>".$errormessage."</errormessage>\n";
+		}
+		last ACTION;
 	    }
-	    last ACTION;
-	}
-	if (/^receivelist/) {
-	    $result = getreceivingstatus();
-	    if ($result != -1) {
-		print STDOUT "<status>success</status>\n";
-		print STDOUT "<active>".$result."</active>\n";
-	    } else {
-		print STDOUT "<status>error</status>\n";
-		print STDOUT "<errormessage>".$errormessage."</errormessage>\n";
+	    if (/^send$/) {
+		$psgiresult .= "<startsnapshot>".$startsnapshot."</startsnapshot>\n";
+		$psgiresult .= "<endsnapshot>".$endsnapshot."</endsnapshot>\n";
+		$psgiresult .= "<remotedcip>".$remotedcip."</remotedcip>\n";
+		$psgiresult .= "<remotedataset>".$remotedataset."</remotedataset>\n";
+		$result = senddelta();
+		if ($result == 0) {
+		    $psgiresult .= "<status>success</status>\n";
+		} else {
+		    $psgiresult .= "<status>error</status>\n";
+		    $psgiresult .= "<errormessage>".$errormessage."</errormessage>\n";
+		}
+		last ACTION;
 	    }
-	    last ACTION;
-	}
-	if (/^targetinfo/) {
-	    $result = gettargetinfo();
-	    if ($result != -1) {
-		print STDOUT "<status>success</status>\n";
-		print STDOUT "<targetname>".$targetname."</targetname>\n";
-		print STDOUT "<targetinfo>".$result."</targetinfo>\n";
-	    } else {
-		print STDOUT "<status>error</status>\n";
-		print STDOUT "<errormessage>".$errormessage."</errormessage>\n";
+	    if (/^sendlist/) {
+		$result = getsendingstatus();
+		if ($result != -1) {
+		    $psgiresult .= "<status>success</status>\n";
+		    $psgiresult .= "<sendingprocesses>".$result."</sendingprocesses>\n";
+		} else {
+		    $psgiresult .= "<status>error</status>\n";
+		    $psgiresult .= "<errormessage>".$errormessage."</errormessage>\n";
+		}
+		last ACTION;
 	    }
-	    last ACTION;
+	    if (/^senddetails/) {
+		$result = getsendingdetails();
+		if ($result != -1) {
+		    $psgiresult .= "<status>success</status>\n";
+		    $psgiresult .= "<sendingprocesses>".$result."</sendingprocesses>\n";
+		} else {
+		    $psgiresult .= "<status>error</status>\n";
+		    $psgiresult .= "<errormessage>".$errormessage."</errormessage>\n";
+		}
+		last ACTION;
+	    }
+	    if (/^receivelist/) {
+		$result = getreceivingstatus();
+		if ($result != -1) {
+		    $psgiresult .= "<status>success</status>\n";
+		    $psgiresult .= "<active>".$result."</active>\n";
+		} else {
+		    $psgiresult .= "<status>error</status>\n";
+		    $psgiresult .= "<errormessage>".$errormessage."</errormessage>\n";
+		}
+		last ACTION;
+	    }
+	    if (/^targetinfo/) {
+	        $result = gettargetinfo();
+		if ($result != -1) {
+		    $psgiresult .= "<status>success</status>\n";
+		    $psgiresult .= "<targetname>".$targetname."</targetname>\n";
+		    $psgiresult .= "<targetinfo>".$result."</targetinfo>\n";
+		} else {
+		    $psgiresult .= "<status>error</status>\n";
+		    $psgiresult .= "<errormessage>".$errormessage."</errormessage>\n";
+		}
+		last ACTION;
+	    }
+	    if (/^version/) {
+		$psgiresult .= "<status>success</status>\n";
+		$psgiresult .= "<version>".$version."</version>\n";
+		last ACTION;
+	    }
+	    $psgiresult .= "<status>error</status>\n";
+	    $psgiresult .= "<status>You have requested something that I don't understand.</status>\n";
 	}
-	if (/^version/) {
-	    print STDOUT "<status>success</status>\n";
-	    print STDOUT "<version>".$version."</version>\n";
-	    last ACTION;
-	}
-	print STDOUT "<status>error</status>\n";
-	print STDOUT "<status>You have requested something that I don't understand.</status>\n";
-    }
-getxmlfoot();
+    getxmlfoot();
+
+    return [
+	'200',
+	[ 'Content-Type' => 'text/xml'],
+	[ $psgiresult ]
+	];
+}
