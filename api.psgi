@@ -6,7 +6,7 @@ use v5.14;
 use Data::UUID;
 
 #-----------------------------
-my $version = "2.0.4";
+my $version = "2.0.8";
 my $i;
 my $action = "null";
 my $snapsource = "null";
@@ -42,7 +42,7 @@ my $sudopath = "/usr/local/bin/sudo";
 my $tmppath = "/tmp";
 my $loglocation = "/var/log/zfsreplica";
 # debug: 0 - none, 1 - basic, 2 - extensive
-my $debug = 0;
+my $debug = 2;
 my %children;
 
 my $psgiresult = "";
@@ -459,6 +459,7 @@ sub disabletarget() {
     my $line;
     my $bracketcount = 0;
     my $targetfound = 0;
+    my $openstatus = 0;
 
     if (defined($targetname)) {
 	$ug = Data::UUID -> new;
@@ -468,7 +469,11 @@ sub disabletarget() {
 	system($spell);
 	$spell = $sudopath." /bin/chmod 644 ".$ctlconfpath;
 	system($spell);
-	open(CTLCONF, "<", $ctlconfpath) or return 1;
+	$openstatus = open(CTLCONF, "<", $ctlconfpath);
+	if ($openstatus == 0) {
+	    $errormessage = "cannot open ".$ctlconfpath." for reading.";
+	    return 1;
+	}
 	open(CTLCONFNEW, ">", $ctlconfpath.".new") or return 1;
 	while (!eof(CTLCONF)) {
 	    $line = readline(*CTLCONF);
@@ -521,6 +526,7 @@ sub disabletarget() {
 	    return 1;
 	}
     } else {
+	$errormessage = "targetname not defined.";
 	return 1;
     }
 }
@@ -662,6 +668,7 @@ sub getsendingdetails() {
     my $sent;
     my @tmp;
     my $sendlogpath;
+    my $spellfmt;
 
     if (defined($remotedcip) && defined($startsnapshot) && defined($endsnapshot)) {
 	$ug = Data::UUID -> new;
@@ -670,7 +677,9 @@ sub getsendingdetails() {
 
 	$spell = "ps awwwwx | grep zfs\\ send | grep @".$startsnapshot." | grep @".$endsnapshot." | egrep -v 'sudo|grep' | wc -l | tr -d ' ' >".$logpath;
 	if ($debug > 0) {
-	    $psgiresult .= "<debug><spell>".$spell."</spell></debug>"
+	    $spellfmt = $spell;
+	    $spellfmt =~ s/>/&gt;/g;
+	    $psgiresult .= "<debug><spell>".$spell."</spell></debug>\n"
 	}
 	system($spell);
 	open(LOG, "<".$logpath);
@@ -688,11 +697,14 @@ sub getsendingdetails() {
 	    $errormessage = "log lines number is greater than one.";
 	    return -1;
 	} else {
-	    $psgiresult .= "<active>".$line."</active>";
+	    $psgiresult .= "<active>".$line."</active>\n";
 	    $uuid = $ug -> create_str();
 	    $logpath = "/tmp/zfs-send-details-ps-".$uuid.".log";
 	    $lognamestart = "zfs-send-".$remotedcip;
 	    $spell = "ls -l ".$loglocation." | grep ".$lognamestart." | grep @".$startsnapshot." | grep @".$endsnapshot." | awk '{print $9}' >".$logpath;
+	    if ($debug > 1) {
+		$psgiresult .= "<debug><sendlogsearchspell>".$spell."</sendlogsearchspell></debug>\n"
+	    }
 	    system($spell);
 
 	    $rs = open(SPELLLOG, "<".$logpath);
@@ -702,7 +714,7 @@ sub getsendingdetails() {
 		    $line = readline(SPELLLOG);
 		    chomp($line);
 		    if ($debug > 1) {
-			$psgiresult .= "<debug><rawline>".$line."</rawline></debug>"
+			$psgiresult .= "<debug><rawline>".$line."</rawline></debug>\n"
 		    }
 		    chomp($line);
 		    @tmp = split(/[\s\t]+/, $line);
@@ -719,33 +731,38 @@ sub getsendingdetails() {
 	    }
 
 	    if ($debug > 0) {
-		$psgiresult .= "<debug><sendlogpath>".$loglocation."/".$sendlogpath."</sendlogpath></debug>"
+		$psgiresult .= "<debug><sendlogpath>".$loglocation."/".$sendlogpath."</sendlogpath></debug>\n"
 	    }
 
-	    $rs = open(SENDLOG, "<".$loglocation."/".$sendlogpath);
-	    if ($rs > 0) {
-		while (!eof(SENDLOG)) {
-		    $line = readline(SENDLOG);
-		    chomp($line);
-		    if ($debug > 1) {
-			$psgiresult .= "<debug><rawline>".$line."</rawline></debug>"
-		    }
-		    if ($line =~ /total estimated size is/) {
-			@tmp = split(/[\s\t]+/, $line);
-			$estimated = $tmp[4];
-		    } else {
-			if ($line =~ /\d+:\d+:\d+/) {
+	    if ($sendlogpath ne "") {
+		$rs = open(SENDLOG, "<".$loglocation."/".$sendlogpath);
+		if ($rs > 0) {
+		    while (!eof(SENDLOG)) {
+			$line = readline(SENDLOG);
+			chomp($line);
+			if ($debug > 1) {
+			    $psgiresult .= "<debug><rawline>".$line."</rawline></debug>"
+			}
+			if ($line =~ /total estimated size is/) {
 			    @tmp = split(/[\s\t]+/, $line);
-			    $sent = $tmp[1];
+			    $estimated = $tmp[4];
+			} else {
+			    if ($line =~ /\d+:\d+:\d+/) {
+				@tmp = split(/[\s\t]+/, $line);
+				$sent = $tmp[1];
+			    }
 			}
 		    }
-		}
-		close(SENDLOG);
+		    close(SENDLOG);
 
-		# do the final data
-		return "<details>\n<totalestimated>".$estimated."</totalestimated>\n<alreadysent>".$sent."</alreadysent>\n</details>\n";
+		    # do the final data
+		    return "<details>\n<totalestimated>".$estimated."</totalestimated>\n<alreadysent>".$sent."</alreadysent>\n</details>\n";
+		} else {
+		    $errormessage = "cannot open zfs send logfile for reading: ".$sendlogpath;
+		    return -1;
+		}
 	    } else {
-		$errormessage = "cannot open zfs send logfile for reading: ".$sendlogpath;
+		$errormessage = "cannot find send log.";
 		return -1;
 	    }
 	}
@@ -1063,6 +1080,7 @@ uwsgi::spooler(
 $app = sub {
     # zeroing everything
     $psgiresult = "";
+    $errormessage = "";
     $action = "null";
     $snapsource = "null";
     $snapsourcefmt;
@@ -1078,6 +1096,7 @@ $app = sub {
     $targetname = "null";
     $device = "null";
     $lun = "null";
+    $result = -1;
 
     # parsing REQUEST_URI
     $env = shift;
@@ -1265,6 +1284,7 @@ $app = sub {
 		if ($result == 0) {
 		    $psgiresult .= "<status>success</status>\n";
 		} else {
+		    $psgiresult .= "<debug>result:".$result."</debug>\n";
 		    $psgiresult .= "<status>error</status>\n";
 		    $psgiresult .= "<errormessage>".$errormessage."</errormessage>\n";
 		}
@@ -1326,6 +1346,9 @@ $app = sub {
 		last ACTION;
 	    }
 	    if (/^senddetails/) {
+		$psgiresult .= "<startsnapshot>".$startsnapshot."</startsnapshot>\n";
+		$psgiresult .= "<endsnapshot>".$endsnapshot."</endsnapshot>\n";
+		$psgiresult .= "<remotedcip>".$remotedcip."</remotedcip>\n";
 		$result = getsendingdetails();
 		if ($result != -1) {
 		    $psgiresult .= "<status>success</status>\n";
