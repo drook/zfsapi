@@ -6,20 +6,21 @@ use v5.14;
 use Data::UUID;
 
 #-----------------------------
-my $version = "2.0.8";
+my $version = "2.0.9";
 my $i;
 my $action = "null";
 my $snapsource = "null";
 my $snapsourcefmt;
 my $snapname = "null";
 my $bookmarkname = "null";
-my $victim = "null";
 my $clonesource = "null";
 my $clonesourcefmt;
 my $clonename = "null";
 my $clonenamefmt;
 my $victim = "null";
 my $victimfmt;
+my $snapshot = "null";
+my $snapshotfmt;
 my $targetname = "null";
 my $device = "null";
 my $lun = "null";
@@ -42,7 +43,7 @@ my $sudopath = "/usr/local/bin/sudo";
 my $tmppath = "/tmp";
 my $loglocation = "/var/log/zfsreplica";
 # debug: 0 - none, 1 - basic, 2 - extensive
-my $debug = 2;
+my $debug = 0;
 my %children;
 
 my $psgiresult = "";
@@ -384,6 +385,33 @@ sub destroyentity() {
 	}
     } else {
 	$errormessage = "missing entity name to destroy.";
+	return 1;
+    }
+}
+
+sub getrollback() {
+    #($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst)
+    @time = localtime(time());
+    $time[4]++;
+    $time[5] += 1900;
+    if (defined($snapshot)) {
+	$snapshotfmt = $snapshot;
+	$snapshotfmt =~ s/\//_/g;
+	$logpath = $tmppath."/rollback-".$snapshotfmt."-".$time[5]."-".$time[4]."-".$time[3]."-".$time[2]."-".$time[1]."-".$time[0].".log";
+	$spell = $sudopath." /sbin/zfs rollback ".$snapshot." >".$logpath." 2>&1";
+	system($spell);
+	parselog();
+	if ($debug == 0) {
+	    unlink($logpath);
+	}
+	if (@logcontents > 0) {
+	    $errormessage = "log file not empty.";
+	    return 1;
+	} else {
+	    return 0;
+	}
+    } else {
+	$errormessage = "missing snapshot name to rollback to.";
 	return 1;
     }
 }
@@ -752,6 +780,19 @@ sub getsendingdetails() {
 				$sent = $tmp[1];
 			    }
 			}
+			#
+			# ERROR HANDLING
+			#
+
+			# cannot receive incremental stream: destination data/testrep has been modified
+			# since most recent snapshot
+			if ($line =~ /cannot receive incremental stream: destination .+ has been modified/) {
+			    return "<senderror>cannot receive incremental stream: destination has been modified</senderror>";
+			}
+			# warning: cannot send 'data/testrep@ver1008_18': signal received
+			if ($line =~ /cannot send .+: signal received/) {
+			    return "<senderror>cannot send: signal received</senderror>";
+			}
 		    }
 		    close(SENDLOG);
 
@@ -1037,7 +1078,7 @@ sub senddelta() {
 	}
 	$startedat = time();
 
-	$spell = "/usr/local/bin/sudo zfs send -vi ".$startsnapshot." ".$endsnapshot." 2>>".$logpath." | ssh ".$remotedcip." sudo zfs receive -d ".$remotedataset." &";
+	$spell = "/usr/local/bin/sudo zfs send -vi ".$startsnapshot." ".$endsnapshot." 2>>".$logpath." | ssh ".$remotedcip." sudo zfs receive -d ".$remotedataset." 2>>".$logpath." &";
 
 	uwsgi::spool({spell => $spell});
 
@@ -1092,7 +1133,9 @@ $app = sub {
     $clonename = "null";
     $clonenamefmt;
     $victim = "null";
-    $victimfmt;
+    $victimfmt = "null";
+    $snapshot = "null";
+    $snapshotfmt = "null";
     $targetname = "null";
     $device = "null";
     $lun = "null";
@@ -1214,6 +1257,14 @@ $app = sub {
 		$endsnapshot = $tmp[1];
 	    } else {
 	        $endsnapshot = "null";
+	    }
+	}
+	if ($request[$i] =~ "snapshot") {
+	    @tmp = split(/=/, $request[$i]);
+	    if (defined($tmp[1])) {
+		$snapshot = $tmp[1];
+	    } else {
+	        $snapshot = "null";
 	    }
 	}
 	$i++;
@@ -1376,6 +1427,17 @@ $app = sub {
 		    $psgiresult .= "<status>success</status>\n";
 		    $psgiresult .= "<targetname>".$targetname."</targetname>\n";
 		    $psgiresult .= "<targetinfo>".$result."</targetinfo>\n";
+		} else {
+		    $psgiresult .= "<status>error</status>\n";
+		    $psgiresult .= "<errormessage>".$errormessage."</errormessage>\n";
+		}
+		last ACTION;
+	    }
+	    if (/^rollback/) {
+		$psgiresult .= "<snapshot>".$startsnapshot."</snapshot>\n";
+	        $result = getrollback();
+		if ($result != -1) {
+		    $psgiresult .= "<status>success</status>\n";
 		} else {
 		    $psgiresult .= "<status>error</status>\n";
 		    $psgiresult .= "<errormessage>".$errormessage."</errormessage>\n";
