@@ -6,7 +6,7 @@ use v5.14;
 use Data::UUID;
 
 #-----------------------------
-my $version = "2.0.9";
+my $version = "2.0.14";
 my $i;
 my $action = "null";
 my $snapsource = "null";
@@ -103,7 +103,7 @@ sub getsnapshot() {
 	    return 1;
 	} else {
 	    if ($debug == 0) {
-		unlink($logpath);
+		#unlink($logpath);
 	    }
 	    return 0;
 	}
@@ -135,7 +135,7 @@ sub getbookmark() {
 	    return 1;
 	} else {
 	    if ($debug == 0) {
-		unlink($logpath);
+		#unlink($logpath);
 	    }
 	    return 0;
 	}
@@ -159,7 +159,7 @@ sub getclone() {
 	system($spell);
 	parselog();
 	if ($debug == 0) {
-	    unlink($logpath);
+	    #unlink($logpath);
         }
 	if (@logcontents > 0) {
 	    $errormessage = "log file not empty.";
@@ -183,7 +183,7 @@ sub getstatus() {
     system($spell);
     parselog();
     if ($debug == 0) {
-	unlink($logpath);
+	#unlink($logpath);
     }
     return 0;
 }
@@ -198,7 +198,7 @@ sub getreload() {
     system($spell);
     parselog();
     if ($debug == 0) {
-	unlink($logpath);
+	#unlink($logpath);
     }
     return 0;
 }
@@ -340,7 +340,7 @@ sub gettargetinfo() {
 	}
 	close(CTLADMLOG);
 	if ($debug == 0) {
-	    unlink($logpath);
+	    #unlink($logpath);
 	    unlink($ctladmlogpath);
 	}
 
@@ -375,7 +375,7 @@ sub destroyentity() {
 	system($spell);
 	parselog();
 	if ($debug == 0) {
-	    unlink($logpath);
+	    #unlink($logpath);
 	}
 	if (@logcontents > 0) {
 	    $errormessage = "log file not empty.";
@@ -402,7 +402,7 @@ sub getrollback() {
 	system($spell);
 	parselog();
 	if ($debug == 0) {
-	    unlink($logpath);
+	    #unlink($logpath);
 	}
 	if (@logcontents > 0) {
 	    $errormessage = "log file not empty.";
@@ -467,8 +467,10 @@ sub enabletarget() {
 	    $psgiresult .= "<debug>returning 0</debug>\n";
 	}
 	if ($debug == 0) {
+	    $spell = $sudopath." /usr/sbin/chown zfsreplica:www ".$ctlconfpath;
+	    system($spell);
 	    unlink($ctlconfpath);
-	    unlink($logpath);
+	    #unlink($logpath);
 	}
 	if ($targetfound > 0) {
 	    return 0;
@@ -541,8 +543,10 @@ sub disabletarget() {
 	$spell = $sudopath." /bin/mv ".$ctlconfpath.".new /etc/ctl.conf";
 	system($spell);
 	if ($debug == 0) {
+	    $spell = $sudopath." /usr/sbin/chown zfsreplica:www ".$ctlconfpath;
+	    system($spell);
 	    unlink($ctlconfpath);
-	    unlink($logpath);
+	    #unlink($logpath);
         }
 	if ($targetfound > 0) {
 	    if ($debug > 0) {
@@ -621,8 +625,10 @@ sub mounttarget() {
 	$spell = $sudopath." /bin/mv ".$ctlconfpath.".new /etc/ctl.conf";
 	system($spell);
 	if ($debug == 0) {
+	    $spell = $sudopath." /usr/sbin/chown zfsreplica:www ".$ctlconfpath;
+	    system($spell);
 	    unlink($ctlconfpath);
-	    unlink($logpath);
+	    #unlink($logpath);
 	}
 	if ($targetmodified > 0) {
 	    if ($debug > 0) {
@@ -1434,7 +1440,7 @@ $app = sub {
 		last ACTION;
 	    }
 	    if (/^rollback/) {
-		$psgiresult .= "<snapshot>".$startsnapshot."</snapshot>\n";
+		$psgiresult .= "<snapshot>".$snapshot."</snapshot>\n";
 	        $result = getrollback();
 		if ($result != -1) {
 		    $psgiresult .= "<status>success</status>\n";
