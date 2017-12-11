@@ -218,8 +218,8 @@ sub formatspell {
     return $spellfmt;
 }
 
-sub getrelease() 
-{
+sub getrelease() {
+
     my $ug;
     my $uuid;
     my $ctladmlogpath;
@@ -230,8 +230,7 @@ sub getrelease()
     my $blockdev;
     my $vdev;
 
-    if (defined($victim) && $victim ne "null") 
-    {
+    if (defined($victim) && $victim ne "null") {
         $ug = Data::UUID -> new;
         $uuid = $ug -> create_str();
         
@@ -239,25 +238,19 @@ sub getrelease()
         $spell = $sudopath." /usr/sbin/ctladm devlist -v > ".$ctladmlogpath." 2>&1";
         system($spell);
         open(CTLADMLOG, "<", $ctladmlogpath) or return 1;
-        while (!eof(CTLADMLOG) && $devicefound == 0) 
-        {
+        while (!eof(CTLADMLOG) && $devicefound == 0) {
             $line = readline(*CTLADMLOG);
             chomp($line);
 
-            if ($line =~ /^[\s\t]*\d+ block/) 
-            {
+            if ($line =~ /^[\s\t]*\d+ block/) {
                 @temp = split(/ +/, $line);
                 $blockdev = $temp[0];
-            } 
-            else 
-            {
-                if ($line =~ /^[\s\t]*file=/) 
-                {
+            } else {
+                if ($line =~ /^[\s\t]*file=/) {
                     @temp = split(/=/, $line);
                     $vdev = $temp[1];
 
-                    if ($vdev eq '/dev/zvol/'.$victim ) 
-                    {
+                    if ($vdev eq '/dev/zvol/'.$victim ) {
                         # we found our victim
                         $devicefound = 1;
                         @time = localtime(time());
@@ -267,8 +260,7 @@ sub getrelease()
                         $victimfmt =~ s/\//_/g;
                         $logpath = $tmppath."/release-".$victimfmt."-".$time[5]."-".$time[4]."-".$time[3]."-".$time[2]."-".$time[1]."-".$time[0].".log";
                         $spell = $sudopath." /usr/sbin/ctladm remove -b block -l ".$blockdev." >".$logpath." 2>&1";
-                        if ($debug > 0) 
-                        {
+                        if ($debug > 0) {
                             $psgiresult .= "<debug>".formatspell($spell)."</debug>\n";
                         }
                         system($spell);
@@ -279,36 +271,25 @@ sub getrelease()
             $ctladmlines++;
         }
         close(CTLADMLOG);
-        if ($debug == 0) 
-        {
+        if ($debug == 0) {
             unlink($logpath);
             unlink($ctladmlogpath);
         }
-        
-        if (@logcontents == 1 && $logcontents[0] =~ /LUN \d+ removed successfully/) 
-        {
+        if (@logcontents == 1 && $logcontents[0] =~ /LUN \d+ removed successfully/) {
             return 0;
-        } 
-        else 
-        {
+        } else {
             $errormessage = "log file tells me something got wrong.";
             return 1;
         }
-        
-        if ($devicefound == 0) 
-        {
+        if ($devicefound == 0) {
             $errormessage = "didn't find device to release.";
             return 1;
         }
-        
-        if ($ctladmlines <= 1) 
-        {
+        if ($ctladmlines <= 1) {
             $errormessage = "ctladm log is empty, check sudo permissions.";
             return 1;
         }
-    } 
-    else
-    {
+    } else {
         $errormessage = "missing entity name to release.";
         return 1;
     }
@@ -335,8 +316,7 @@ sub gettargetinfo() {
     $spell = $sudopath." /usr/sbin/ctladm devlist -v > ".$ctladmlogpath." 2>&1";
     system($spell);
     open(CTLADMLOG, "<", $ctladmlogpath) or return 1;
-    while (!eof(CTLADMLOG) && $devicefound == 0) 
-    {
+    while (!eof(CTLADMLOG) && $devicefound == 0) {
         $line = readline(*CTLADMLOG);
         chomp($line);
 
@@ -1140,7 +1120,7 @@ sub senddelta() {
     }
 }
 
-sub targetcreate(){
+sub targetcreate() {
 
     my $ug;
     my $uuid;
@@ -1151,8 +1131,7 @@ sub targetcreate(){
     
     if (defined($targetname) && $targetname ne "null" &&
         defined($deviceid) && $deviceid ne "null" &&
-        defined($serialnumber) && $serialnumber ne "null")
-    {
+        defined($serialnumber) && $serialnumber ne "null") {
         $ug = Data::UUID -> new;
         $uuid = $ug -> create_str();
         
@@ -1160,44 +1139,31 @@ sub targetcreate(){
         $spell = $sudopath." /usr/sbin/ctladm create -b block -o file=".$targetname." -d ".$deviceid." -S ".$serialnumber." > ".$ctladmlogpath." 2>&1";
         system($spell);
         open(CTLADMLOG, "<", $ctladmlogpath) or return 1;
-        while (!eof(CTLADMLOG))
-        {
+        while (!eof(CTLADMLOG)) {
             $line = readline(*CTLADMLOG);
-            if(index($line, "LUN created successfully") != -1)
-            {
+            if(index($line, "LUN created successfully") != -1) {
                 $successflag = 1;
-            }
-            else
-            {
-                if($successflag == 0)
-                {
+            } else {
+                if($successflag == 0) {
                     $messageerror = $messageerror.$line;
-                }
-                else
-                {
+                } else {
                     $messageinfo = $messageinfo.$line;
                 }
             }
         }
         close(CTLADMLOG);
-        if ($debug == 0) 
-        {
+        if ($debug == 0) {
             unlink($ctladmlogpath);
         }
-        if($successflag == 0)
-        {
+        if($successflag == 0) {
             $errormessage = $messageerror;
             return 1;
-        }
-        else
-        {
+        } else {
             $warningmessage = $messageerror;
             $infomessage = $messageinfo;
             return 0;
         }
-    }
-    else
-    {
+    } else {
         $errormessage = "missing parameters to do create command.";
         return 1;
     }
@@ -1240,174 +1206,139 @@ $app = sub {
     $env = shift;
     @request = split(/[\?\&]/, $env -> {'REQUEST_URI'});
     $i = 0;
-    while ($i < @request) 
-    {
+    while ($i < @request) {
         chomp($request[$i]);
-        if ($request[$i] =~ "^action") 
-        {
+        if ($request[$i] =~ "^action") {
             @tmp = split(/=/, $request[$i]);
-            if (defined($tmp[1])) 
-            {
+            if (defined($tmp[1])) {
                  $action = $tmp[1];
             } else {
                  $action = "null";
             }
         }
-        if ($request[$i] =~ "^snapsource") 
-        {
+        if ($request[$i] =~ "^snapsource") {
             @tmp = split(/=/, $request[$i]);
-            if (defined($tmp[1])) 
-            {
+            if (defined($tmp[1])) {
                 $snapsource = $tmp[1];
             } else {
                 $snapsource = "null";
             }
         }
-        if ($request[$i] =~ "^snapname") 
-        {
+        if ($request[$i] =~ "^snapname") {
             @tmp = split(/=/, $request[$i]);
-            if (defined($tmp[1])) 
-            {
+            if (defined($tmp[1])) {
                 $snapname = $tmp[1];
             } else {
                 $snapname = "null";
             }
         }
-        if ($request[$i] =~ "^bookmarkname") 
-        {
+        if ($request[$i] =~ "^bookmarkname") {
             @tmp = split(/=/, $request[$i]);
-            if (defined($tmp[1])) 
-            {
+            if (defined($tmp[1])) {
                 $bookmarkname = $tmp[1];
             } else {
                 $bookmarkname = "null";
             }
         }
-        if ($request[$i] =~ "^victim") 
-        {
+        if ($request[$i] =~ "^victim") {
             @tmp = split(/=/, $request[$i]);
-            if (defined($tmp[1])) 
-            {
+            if (defined($tmp[1])) {
                 $victim = $tmp[1];
             } else {
                 $victim = "null";
             }
         }
-        if ($request[$i] =~ "^clonesource") 
-        {
+        if ($request[$i] =~ "^clonesource") {
             @tmp = split(/=/, $request[$i]);
-            if (defined($tmp[1])) 
-            {
+            if (defined($tmp[1])) {
                 $clonesource = $tmp[1];
             } else {
                 $clonesource = "null";
             }
         }
-        if ($request[$i] =~ "^clonename") 
-        {
+        if ($request[$i] =~ "^clonename") {
             @tmp = split(/=/, $request[$i]);
-            if (defined($tmp[1])) 
-            {
+            if (defined($tmp[1])) {
                 $clonename = $tmp[1];
             } else {
                 $clonename = "null";
             }
         }
-        if ($request[$i] =~ "targetname") 
-        {
+        if ($request[$i] =~ "targetname") {
             @tmp = split(/=/, $request[$i]);
-            if (defined($tmp[1])) 
-            {
+            if (defined($tmp[1])) {
                 $targetname = $tmp[1];
             } else {
                 $targetname = "null";
             }
         }
-        if ($request[$i] =~ "device") 
-        {
+        if ($request[$i] =~ "device") {
             @tmp = split(/=/, $request[$i]);
-            if (defined($tmp[1])) 
-            {
+            if (defined($tmp[1])) {
                 $device = $tmp[1];
             } else {
                 $device = "null";
             }
         }
-        if ($request[$i] =~ "lun") 
-        {
+        if ($request[$i] =~ "lun") {
             @tmp = split(/=/, $request[$i]);
-            if (defined($tmp[1])) 
-            {
+            if (defined($tmp[1])) {
                 $lun = $tmp[1];
             } else {
                 $lun = "null";
             }
         }
-        if ($request[$i] =~ "remotedcip") 
-        {
+        if ($request[$i] =~ "remotedcip") {
             @tmp = split(/=/, $request[$i]);
-            if (defined($tmp[1])) 
-            {
+            if (defined($tmp[1])) {
                 $remotedcip = $tmp[1];
             } else {
                 $remotedcip = "null";
             }
         }
-        if ($request[$i] =~ "remotedataset") 
-        {
+        if ($request[$i] =~ "remotedataset") {
             @tmp = split(/=/, $request[$i]);
-            if (defined($tmp[1])) 
-            {
+            if (defined($tmp[1])) {
                 $remotedataset = $tmp[1];
             } else {
                 $remotedataset = "null";
             }
         }
-        if ($request[$i] =~ "startsnapshot") 
-        {
+        if ($request[$i] =~ "startsnapshot") {
             @tmp = split(/=/, $request[$i]);
-            if (defined($tmp[1])) 
-            {
+            if (defined($tmp[1])) {
                 $startsnapshot = $tmp[1];
             } else {
                 $startsnapshot = "null";
             }
         }
-        if ($request[$i] =~ "endsnapshot") 
-        {
+        if ($request[$i] =~ "endsnapshot") {
             @tmp = split(/=/, $request[$i]);
-            if (defined($tmp[1])) 
-            {
+            if (defined($tmp[1])) {
                 $endsnapshot = $tmp[1];
             } else {
                 $endsnapshot = "null";
             }
         }
-        if ($request[$i] =~ "snapshot") 
-        {
+        if ($request[$i] =~ "snapshot") {
             @tmp = split(/=/, $request[$i]);
-            if (defined($tmp[1])) 
-            {
+            if (defined($tmp[1])) {
                 $snapshot = $tmp[1];
             } else {
                 $snapshot = "null";
             }
         }
-        if ($request[$i] =~ "deviceid") 
-        {
+        if ($request[$i] =~ "deviceid") {
             @tmp = split(/=/, $request[$i]);
-            if (defined($tmp[1])) 
-            {
+            if (defined($tmp[1])) {
                 $deviceid = $tmp[1];
             } else {
                 $deviceid = "null";
             }
         }
-        if ($request[$i] =~ "serialnumber") 
-        {
+        if ($request[$i] =~ "serialnumber") {
             @tmp = split(/=/, $request[$i]);
-            if (defined($tmp[1])) 
-            {
+            if (defined($tmp[1])) {
                 $serialnumber = $tmp[1];
             } else {
                 $serialnumber = "null";
@@ -1419,65 +1350,55 @@ $app = sub {
     getxmlhead();
     $psgiresult .= "<action>".$action."</action>\n";
     ACTION:
-    for ($action) 
-    {
-        if (/^snapshot/) 
-        {
+    for ($action) {
+        if (/^snapshot/) {
             $psgiresult .= "<snapsource>".$snapsource."</snapsource>\n";
             $psgiresult .= "<snapname>".$snapname."</snapname>\n";
             $result = getsnapshot();
             handleresult();
             last ACTION;
         }
-        if (/^bookmark/) 
-        {
+        if (/^bookmark/) {
             $psgiresult .= "<snapsource>".$snapsource."</snapsource>\n";
             $psgiresult .= "<bookmarkname>".$snapname."</bookmarkname>\n";
             $result = getbookmark();
             handleresult();
             last ACTION;
         }
-        if (/^clone/) 
-        {
+        if (/^clone/) {
             $psgiresult .= "<clonesource>".$clonesource."</clonesource>\n";
             $psgiresult .= "<clonename>".$clonename."</clonename>\n";
             $result = getclone();
             handleresult();
             last ACTION;
         }
-        if (/^destroy/) 
-        {
+        if (/^destroy/) {
             $psgiresult .= "<victim>".$victim."</victim>\n";
             $result = destroyentity();
             handleresult();
             last ACTION;
         }
-        if (/^status/) 
-        {
+        if (/^status/) {
             $result = getstatus();
             handlestatus();
             last ACTION;
         }
-        if (/^targetmount/) 
-        {
+        if (/^targetmount/) {
             $psgiresult .= "<targetname>".$targetname."</targetname>\n";
             $psgiresult .= "<device>".$device."</device>\n";
             $psgiresult .= "<lun>".$lun."</lun>\n";
             $result = mounttarget();
-            if ($result == 0) 
-            {
+            if ($result == 0) {
                 $psgiresult .= "<status>success</status>\n";
             } else {
                 $psgiresult .= "<status>error</status>\n";
             }
             last ACTION;
         }
-        if (/^targetenable/) 
-        {
+        if (/^targetenable/) {
             $psgiresult .= "<targetname>".$targetname."</targetname>\n";
             $result = enabletarget();
-            if ($result == 0) 
-            {
+            if ($result == 0) {
                 $psgiresult .= "<status>success</status>\n";
             } else {
                 $psgiresult .= "<status>error</status>\n";
@@ -1485,12 +1406,10 @@ $app = sub {
             }
             last ACTION;
         }
-        if (/^targetdisable/) 
-        {
+        if (/^targetdisable/) {
             $psgiresult .= "<targetname>".$targetname."</targetname>\n";
             $result = disabletarget();
-            if ($result == 0) 
-            {
+            if ($result == 0) {
                 $psgiresult .= "<status>success</status>\n";
             } else {
                 $psgiresult .= "<debug>result:".$result."</debug>\n";
@@ -1499,22 +1418,18 @@ $app = sub {
             }
             last ACTION;
         }
-        if (/^release/) 
-        {
+        if (/^release/) {
             $psgiresult .= "<victim>".$victim."</victim>\n";
             $result = getrelease();
-            if ($result == 0) 
-            {
+            if ($result == 0) {
                 $psgiresult .= "<status>success</status>\n";
             } else {
                 $psgiresult .= "<status>error</status>\n";
                 $psgiresult .= "<errormessage>".$errormessage."</errormessage>\n";
-                if (@logcontents > 0) 
-                {
+                if (@logcontents > 0) {
                     $psgiresult .= "<log>\n";
                     $i = 0;
-                    while ($i < @logcontents) 
-                    {
+                    while ($i < @logcontents) {
                         $psgiresult .= "<entry>".$logcontents[$i]."</entry>\n";
                         $i++
                     }
@@ -1523,11 +1438,9 @@ $app = sub {
             }
             last ACTION;
         }
-        if (/^reload/) 
-        {
+        if (/^reload/) {
             $result = getreload();
-            if ($result == 0) 
-            {
+            if ($result == 0) {
                 $psgiresult .= "<status>success</status>\n";
             } else {
                 $psgiresult .= "<status>error</status>\n";
@@ -1535,15 +1448,13 @@ $app = sub {
             }
             last ACTION;
         }
-        if (/^send$/) 
-        {
+        if (/^send$/) {
             $psgiresult .= "<startsnapshot>".$startsnapshot."</startsnapshot>\n";
             $psgiresult .= "<endsnapshot>".$endsnapshot."</endsnapshot>\n";
             $psgiresult .= "<remotedcip>".$remotedcip."</remotedcip>\n";
             $psgiresult .= "<remotedataset>".$remotedataset."</remotedataset>\n";
             $result = senddelta();
-            if ($result == 0) 
-            {
+            if ($result == 0) {
                 $psgiresult .= "<status>success</status>\n";
             } else {
                 $psgiresult .= "<status>error</status>\n";
@@ -1551,11 +1462,9 @@ $app = sub {
             }
             last ACTION;
         }
-        if (/^sendlist/) 
-        {
+        if (/^sendlist/) {
             $result = getsendingstatus();
-            if ($result != -1) 
-            {
+            if ($result != -1) {
                 $psgiresult .= "<status>success</status>\n";
                 $psgiresult .= "<sendingprocesses>".$result."</sendingprocesses>\n";
             } else {
@@ -1564,14 +1473,12 @@ $app = sub {
             }
             last ACTION;
         }
-        if (/^senddetails/) 
-        {
+        if (/^senddetails/) {
             $psgiresult .= "<startsnapshot>".$startsnapshot."</startsnapshot>\n";
             $psgiresult .= "<endsnapshot>".$endsnapshot."</endsnapshot>\n";
             $psgiresult .= "<remotedcip>".$remotedcip."</remotedcip>\n";
             $result = getsendingdetails();
-            if ($result != -1)
-            {
+            if ($result != -1) {
                 $psgiresult .= "<status>success</status>\n";
                 $psgiresult .= "<sendingprocesses>".$result."</sendingprocesses>\n";
             } else {
@@ -1580,11 +1487,9 @@ $app = sub {
             }
             last ACTION;
         }
-        if (/^receivelist/) 
-        {
+        if (/^receivelist/) {
             $result = getreceivingstatus();
-            if ($result != -1) 
-            {
+            if ($result != -1) {
                 $psgiresult .= "<status>success</status>\n";
                 $psgiresult .= "<active>".$result."</active>\n";
             } else {
@@ -1593,11 +1498,9 @@ $app = sub {
             }
             last ACTION;
         }
-        if (/^targetinfo/) 
-        {
+        if (/^targetinfo/) {
             $result = gettargetinfo();
-            if ($result != -1) 
-            {
+            if ($result != -1) {
                 $psgiresult .= "<status>success</status>\n";
                 $psgiresult .= "<targetname>".$targetname."</targetname>\n";
                 $psgiresult .= "<targetinfo>".$result."</targetinfo>\n";
@@ -1607,12 +1510,10 @@ $app = sub {
             }
             last ACTION;
         }
-        if (/^rollback/) 
-        {
+        if (/^rollback/) {
             $psgiresult .= "<snapshot>".$snapshot."</snapshot>\n";
             $result = getrollback();
-            if ($result != -1) 
-            {
+            if ($result != -1) {
                 $psgiresult .= "<status>success</status>\n";
             } else {
                 $psgiresult .= "<status>error</status>\n";
@@ -1620,32 +1521,25 @@ $app = sub {
             }
             last ACTION;
         }
-        if (/^version/) 
-        {
+        if (/^version/) {
             $psgiresult .= "<status>success</status>\n";
             $psgiresult .= "<version>".$version."</version>\n";
             last ACTION;
         }
-        if (/^targetcreate/)
-        {
+        if (/^targetcreate/) {
             $psgiresult .= "<targetname>".$targetname."</targetname>\n";
             $psgiresult .= "<deviceid>".$deviceid."</deviceid>\n";
             $psgiresult .= "<serialnumber>".$serialnumber."</serialnumber>\n";
             $result = targetcreate();
-            if ($result == 0)
-            {
+            if ($result == 0) {
                 $psgiresult .= "<status>success</status>\n";
-                if($warningmessage ne "")
-                {
+                if($warningmessage ne "") {
                     $psgiresult .= "<warning>".$warningmessage."</warning>\n";
                 }
-                if($infomessage ne "")
-                {
+                if($infomessage ne "") {
                     $psgiresult .= "<info>".$infomessage."</info>\n";
                 }
-            }
-            else
-            {
+            } else {
                 $psgiresult .= "<status>error</status>\n";
                 $psgiresult .= "<errormessage>".$errormessage."</errormessage>\n";
             }
