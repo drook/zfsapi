@@ -22,6 +22,8 @@ my $victimfmt;
 my $snapshot = "null";
 my $snapshotfmt;
 my $targetname = "null";
+my $iscsiname = "null";
+my $lunid = "null";
 my $device = "null";
 my $lun = "null";
 my $deviceid = "null";
@@ -41,6 +43,7 @@ my $remotedcip;
 my $remotedataset;
 my $startsnapshot;
 my $endsnapshot;
+my $lunidinfo = "null";
 # paths
 my $ctlconfpath = "/tmp/ctl.conf";
 my $sudopath = "/usr/local/bin/sudo";
@@ -244,7 +247,7 @@ sub getrelease() {
 
             if ($line =~ /^[\s\t]*\d+ block/) {
                 @temp = split(/ +/, $line);
-                $blockdev = $temp[0];
+                $blockdev = $temp[1];
             } else {
                 if ($line =~ /^[\s\t]*file=/) {
                     @temp = split(/=/, $line);
@@ -323,6 +326,7 @@ sub gettargetinfo() {
         if ($line =~ /^[\s\t]*\d+ block/) {
         @temp = split(/ +/, $line);
         $blockdev = $temp[0];
+        $lunidinfo = $temp[1];
         } else {
         if ($line =~ /^[\s\t]*ctld_name=/) {
             @temp = split(/=/, $line);
@@ -1131,12 +1135,14 @@ sub targetcreate() {
     
     if (defined($targetname) && $targetname ne "null" &&
         defined($deviceid) && $deviceid ne "null" &&
+        defined($iscsiname) && $iscsiname ne "null" &&
+        defined($lunid) && $lunid ne "null" &&
         defined($serialnumber) && $serialnumber ne "null") {
         $ug = Data::UUID -> new;
         $uuid = $ug -> create_str();
         
         $ctladmlogpath = "/tmp/ctladm.log.".$uuid;
-        $spell = $sudopath." /usr/sbin/ctladm create -b block -o file=".$targetname." -d ".$deviceid." -S ".$serialnumber." > ".$ctladmlogpath." 2>&1";
+        $spell = $sudopath." /usr/sbin/ctladm create -b block -o file=".$targetname." -o scsiname=".$iscsiname." -o ctld_name=".$iscsiname." -d ".$deviceid." -S ".$serialnumber." -l ".$lunid." > ".$ctladmlogpath." 2>&1";
         system($spell);
         open(CTLADMLOG, "<", $ctladmlogpath) or return 1;
         while (!eof(CTLADMLOG)) {
@@ -1201,6 +1207,9 @@ $app = sub {
     $deviceid = "null";
     $serialnumber = "null";
     $result = -1;
+    $iscsiname = "null";
+    $lunid = "null";
+    $lunidinfo = "null";
 
     # parsing REQUEST_URI
     $env = shift;
@@ -1342,6 +1351,26 @@ $app = sub {
                 $serialnumber = $tmp[1];
             } else {
                 $serialnumber = "null";
+            }
+        }
+        if ($request[$i] =~ "iscsiname") 
+        {
+            @tmp = split(/=/, $request[$i]);
+            if (defined($tmp[1])) 
+            {
+                $iscsiname = $tmp[1];
+            } else {
+                $iscsiname = "null";
+            }
+        }
+        if ($request[$i] =~ "lunid") 
+        {
+            @tmp = split(/=/, $request[$i]);
+            if (defined($tmp[1])) 
+            {
+                $lunid = $tmp[1];
+            } else {
+                $lunid = "null";
             }
         }
         $i++;
@@ -1504,6 +1533,7 @@ $app = sub {
                 $psgiresult .= "<status>success</status>\n";
                 $psgiresult .= "<targetname>".$targetname."</targetname>\n";
                 $psgiresult .= "<targetinfo>".$result."</targetinfo>\n";
+                $psgiresult .= "<lunid>".$lunidinfo."</lunid>\n";
             } else {
                 $psgiresult .= "<status>error</status>\n";
                 $psgiresult .= "<errormessage>".$errormessage."</errormessage>\n";
@@ -1530,6 +1560,8 @@ $app = sub {
             $psgiresult .= "<targetname>".$targetname."</targetname>\n";
             $psgiresult .= "<deviceid>".$deviceid."</deviceid>\n";
             $psgiresult .= "<serialnumber>".$serialnumber."</serialnumber>\n";
+            $psgiresult .= "<iscsiname>".$iscsiname."</iscsiname>\n";
+            $psgiresult .= "<lunid>".$lunid."</lunid>\n";
             $result = targetcreate();
             if ($result == 0) {
                 $psgiresult .= "<status>success</status>\n";
