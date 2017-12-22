@@ -24,6 +24,7 @@ my $snapshotfmt;
 my $targetname = "null";
 my $scsiname = "null";
 my $lunid = "null";
+my $vendor = "null";
 my $device = "null";
 my $lun = "null";
 my $deviceid = "null";
@@ -44,6 +45,7 @@ my $remotedataset;
 my $startsnapshot;
 my $endsnapshot;
 my $lunidinfo = "null";
+my $vendorinfo = "null";
 # paths
 my $ctlconfpath = "/tmp/ctl.conf";
 my $sudopath = "/usr/local/bin/sudo";
@@ -341,6 +343,12 @@ sub gettargetinfo() {
             if ($line =~ /^[\s\t]*file=\/dev\/zvol\/.+/) {
             @temp = split(/=/, $line);
             $device = @temp[1];
+            }
+            else { 
+                if ($line =~ /^[\s\t]*vendor=/) {
+                    @temp = split(/=/, $line);
+                    $vendorinfo = @temp[1];
+                }
             }
         }
         }
@@ -1137,12 +1145,13 @@ sub targetcreate() {
         defined($deviceid) && $deviceid ne "null" &&
         defined($scsiname) && $scsiname ne "null" &&
         defined($lunid) && $lunid ne "null" &&
+        defined($vendor) && $vendor ne "null" &&
         defined($serialnumber) && $serialnumber ne "null") {
         $ug = Data::UUID -> new;
         $uuid = $ug -> create_str();
         
         $ctladmlogpath = "/tmp/ctladm.log.".$uuid;
-        $spell = $sudopath." /usr/sbin/ctladm create -b block -o file=".$targetname." -o scsiname=".$scsiname." -o ctld_name=".$scsiname." -d ".$deviceid." -S ".$serialnumber." -l ".$lunid." > ".$ctladmlogpath." 2>&1";
+        $spell = $sudopath." /usr/sbin/ctladm create -b block -o file=".$targetname." -o vendor=".$vendor." -o scsiname=".$scsiname." -o ctld_name=".$scsiname." -d ".$deviceid." -S ".$serialnumber." -l ".$lunid." > ".$ctladmlogpath." 2>&1";
         system($spell);
         open(CTLADMLOG, "<", $ctladmlogpath) or return 1;
         while (!eof(CTLADMLOG)) {
@@ -1210,6 +1219,8 @@ $app = sub {
     $scsiname = "null";
     $lunid = "null";
     $lunidinfo = "null";
+    $vendorinfo = "null";
+    $vendor = "null";
 
     # parsing REQUEST_URI
     $env = shift;
@@ -1373,6 +1384,16 @@ $app = sub {
                 $lunid = "null";
             }
         }
+        if ($request[$i] =~ "vendor") 
+        {
+            @tmp = split(/=/, $request[$i]);
+            if (defined($tmp[1])) 
+            {
+                $vendor = $tmp[1];
+            } else {
+                $vendor = "null";
+            }
+        }
         $i++;
     }
 
@@ -1534,6 +1555,7 @@ $app = sub {
                 $psgiresult .= "<targetname>".$targetname."</targetname>\n";
                 $psgiresult .= "<targetinfo>".$result."</targetinfo>\n";
                 $psgiresult .= "<lunidinfo>".$lunidinfo."</lunidinfo>\n";
+                $psgiresult .= "<vendorinfo>".$vendorinfo."</vendorinfo>\n";
             } else {
                 $psgiresult .= "<status>error</status>\n";
                 $psgiresult .= "<errormessage>".$errormessage."</errormessage>\n";
@@ -1562,6 +1584,7 @@ $app = sub {
             $psgiresult .= "<serialnumber>".$serialnumber."</serialnumber>\n";
             $psgiresult .= "<scsiname>".$scsiname."</scsiname>\n";
             $psgiresult .= "<lunid>".$lunid."</lunid>\n";
+            $psgiresult .= "<vendor>".$vendor."</vendor>\n";
             $result = targetcreate();
             if ($result == 0) {
                 $psgiresult .= "<status>success</status>\n";
