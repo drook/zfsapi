@@ -28,7 +28,6 @@ my $vendor = "null";
 my $device = "null";
 my $lun = "null";
 my $deviceid = "null";
-my $serialnumber = "null";
 my $spell;
 my $errormessage;
 my $warningmessage;
@@ -1145,13 +1144,12 @@ sub targetcreate() {
         defined($deviceid) && $deviceid ne "null" &&
         defined($scsiname) && $scsiname ne "null" &&
         defined($lunid) && $lunid ne "null" &&
-        defined($vendor) && $vendor ne "null" &&
-        defined($serialnumber) && $serialnumber ne "null") {
+        defined($vendor) && $vendor ne "null") {
         $ug = Data::UUID -> new;
         $uuid = $ug -> create_str();
         
         $ctladmlogpath = "/tmp/ctladm.log.".$uuid;
-        $spell = $sudopath." /usr/sbin/ctladm create -b block -o file=".$targetname." -o vendor=".$vendor." -o scsiname=".$scsiname." -o ctld_name=".$scsiname." -d ".$deviceid." -S ".$serialnumber." -l ".$lunid." > ".$ctladmlogpath." 2>&1";
+        $spell = $sudopath." /usr/sbin/ctladm create -b block -o file=".$targetname." -o vendor=".$vendor." -o scsiname=".$scsiname." -o ctld_name=".$scsiname." -d ".$deviceid." -l ".$lunid." > ".$ctladmlogpath." 2>&1";
         system($spell);
         open(CTLADMLOG, "<", $ctladmlogpath) or return 1;
         while (!eof(CTLADMLOG)) {
@@ -1214,7 +1212,6 @@ $app = sub {
     $device = "null";
     $lun = "null";
     $deviceid = "null";
-    $serialnumber = "null";
     $result = -1;
     $scsiname = "null";
     $lunid = "null";
@@ -1354,14 +1351,6 @@ $app = sub {
                 $deviceid = $tmp[1];
             } else {
                 $deviceid = "null";
-            }
-        }
-        if ($request[$i] =~ "serialnumber") {
-            @tmp = split(/=/, $request[$i]);
-            if (defined($tmp[1])) {
-                $serialnumber = $tmp[1];
-            } else {
-                $serialnumber = "null";
             }
         }
         if ($request[$i] =~ "scsiname") 
@@ -1581,7 +1570,6 @@ $app = sub {
         if (/^targetcreate/) {
             $psgiresult .= "<targetname>".$targetname."</targetname>\n";
             $psgiresult .= "<deviceid>".$deviceid."</deviceid>\n";
-            $psgiresult .= "<serialnumber>".$serialnumber."</serialnumber>\n";
             $psgiresult .= "<scsiname>".$scsiname."</scsiname>\n";
             $psgiresult .= "<lunid>".$lunid."</lunid>\n";
             $psgiresult .= "<vendor>".$vendor."</vendor>\n";
