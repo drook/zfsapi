@@ -44,6 +44,7 @@ my $remotedataset;
 my $startsnapshot;
 my $endsnapshot;
 my $lunidinfo = "null";
+my $deviceidinfo = "null";
 my $vendorinfo = "null";
 # paths
 my $ctlconfpath = "/tmp/ctl.conf";
@@ -328,6 +329,7 @@ sub gettargetinfo() {
         @temp = split(/ +/, $line);
         $blockdev = $temp[0];
         $lunidinfo = $temp[1];
+        $deviceidinfo = $temp[7];
         } else {
         if ($line =~ /^[\s\t]*ctld_name=/) {
             @temp = split(/=/, $line);
@@ -1216,6 +1218,7 @@ $app = sub {
     $scsiname = "null";
     $lunid = "null";
     $lunidinfo = "null";
+    $deviceidinfo = "null";
     $vendorinfo = "null";
     $vendor = "null";
 
@@ -1544,6 +1547,7 @@ $app = sub {
                 $psgiresult .= "<targetname>".$targetname."</targetname>\n";
                 $psgiresult .= "<targetinfo>".$result."</targetinfo>\n";
                 $psgiresult .= "<lunidinfo>".$lunidinfo."</lunidinfo>\n";
+                $psgiresult .= "<deviceidinfo>".$deviceidinfo."</deviceidinfo>\n";
                 $psgiresult .= "<vendorinfo>".$vendorinfo."</vendorinfo>\n";
             } else {
                 $psgiresult .= "<status>error</status>\n";
