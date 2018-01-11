@@ -6,7 +6,7 @@ use v5.14;
 use Data::UUID;
 
 #-----------------------------
-my $version = "2.0.18";
+my $version = "2.0.19";
 my $i;
 my $action = "null";
 my $snapsource = "null";
@@ -69,6 +69,7 @@ sub dumpall() {
 
 sub parselog() {
     my $openlogresult;
+    my $i;
 
     if ($debug > 0) {
 	$psgiresult .= "<debug>about to parse log: ".$logpath."</debug>\n";
@@ -76,10 +77,16 @@ sub parselog() {
     $openlogresult = open(LOG, "<", $logpath);
     if ($openlogresult) {
 	undef(@logcontents);
+	$i = 0;
 	while (!eof(LOG)) {
 	    $line = readline(LOG);
 	    chomp($line);
 	    push @logcontents, $line;
+	    $i++;
+	}
+	if ($debug > 0) {
+	    $psgiresult .= "<debug>read ".$i." lines</debug>\n";
+	    $psgiresult .= "<debug>log contents array is ".scalar(@logcontents)." elements long</debug>\n";
 	}
 	close(LOG);
 	if ($debug == 0) {
@@ -413,11 +420,11 @@ sub getrollback() {
 	$spell = $sudopath." /sbin/zfs rollback ".$snapshot." >".$logpath." 2>&1";
 	system($spell);
 	parselog();
-	if ($debug == 0) {
-	    #unlink($logpath);
+	if ($debug > 0) {
+	    $psgiresult .= "<debug>log contents array is ".scalar(@logcontents)." elements long</debug>\n";
 	}
-	if (@logcontents > 0) {
-	    $errormessage = "log file not empty.";
+	if (scalar(@logcontents) > 0) {
+	    $errormessage = $logcontents[0];
 	    return 1;
 	} else {
 	    return 0;
@@ -1459,7 +1466,7 @@ $app = sub {
 	    if (/^rollback/) {
 		$psgiresult .= "<snapshot>".$snapshot."</snapshot>\n";
 	        $result = getrollback();
-		if ($result != -1) {
+		if ($result == 0) {
 		    $psgiresult .= "<status>success</status>\n";
 		} else {
 		    $psgiresult .= "<status>error</status>\n";
