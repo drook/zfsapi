@@ -6,7 +6,7 @@ use v5.14;
 use Data::UUID;
 
 #-----------------------------
-my $version = "2.0.17";
+my $version = "2.0.18";
 my $i;
 my $action = "null";
 my $snapsource = "null";
@@ -1290,6 +1290,13 @@ $app = sub {
 		$snapshot = $tmp[1];
 	    } else {
 	        $snapshot = "null";
+	    }
+	}
+	if ($request[$i] =~ "debug") {
+	    @tmp = split(/=/, $request[$i]);
+	    if (defined($tmp[1])) {
+		$debug = $tmp[1];
+	    } else {
 	    }
 	}
 	$i++;
