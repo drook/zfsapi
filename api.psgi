@@ -6,7 +6,7 @@ use v5.14;
 use Data::UUID;
 
 #-----------------------------
-my $version = "2.0.14";
+my $version = "2.0.16";
 my $i;
 my $action = "null";
 my $snapsource = "null";
@@ -70,6 +70,9 @@ sub dumpall() {
 sub parselog() {
     my $openlogresult;
 
+    if ($debug > 0) {
+	$psgiresult .= "<debug>about to parse log: ".$logpath."</debug>\n";
+    }
     $openlogresult = open(LOG, "<", $logpath);
     if ($openlogresult) {
 	undef(@logcontents);
@@ -83,6 +86,7 @@ sub parselog() {
 	    unlink($logpath);
 	}
     } else {
+	$psgiresult .= "<parselog>cannot open log ".$logpath."</parselog>\n";
     }
 }
 
@@ -271,18 +275,26 @@ sub getrelease() {
 	    unlink($logpath);
 	    unlink($ctladmlogpath);
 	}
-	if (@logcontents == 1 && $logcontents[0] =~ /LUN \d+ removed successfully/) {
-	    return 0;
-	} else {
-	    $errormessage = "log file tells me something got wrong.";
-	    return 1;
-	}
 	if ($devicefound == 0) {
 	    $errormessage = "didn't find device to release.";
 	    return 1;
 	}
 	if ($ctladmlines <= 1) {
 	    $errormessage = "ctladm log is empty, check sudo permissions.";
+	    return 1;
+	}
+	if (@logcontents == 1 && $logcontents[0] =~ /LUN \d+ removed successfully/) {
+	    return 0;
+	} else {
+	    $errormessage = "log file tells me something got wrong.";
+	    $psgiresult .= "<log>\n";
+	    $i = 0;
+	    while ($i < @logcontents) {
+	        $psgiresult .= "<entry>".$logcontents[$i]."</entry>\n";
+	        $i++
+	    }
+	    $psgiresult .= "</log>\n";
+
 	    return 1;
 	}
     } else {
@@ -1012,7 +1024,7 @@ sub senddelta() {
 	$firstsnapexists = 0;
 	$secondsnapexists = 0;
 	if ($debug > 1) {
-		$psgiresult .= "<debug>\n";
+	    $psgiresult .= "<debug>\n";
 	}
 	open(LOG, "<".$logpath);
 	while (!eof(LOG) && ($firstsnapexists == 0 || $secondsnapexists == 0)) {
@@ -1355,15 +1367,6 @@ $app = sub {
 		} else {
 		    $psgiresult .= "<status>error</status>\n";
 		    $psgiresult .= "<errormessage>".$errormessage."</errormessage>\n";
-		    if (@logcontents > 0) {
-			$psgiresult .= "<log>\n";
-			$i = 0;
-			while ($i < @logcontents) {
-			    $psgiresult .= "<entry>".$logcontents[$i]."</entry>\n";
-			    $i++
-			}
-			$psgiresult .= "</log>\n";
-		    }
 		}
 		last ACTION;
 	    }
@@ -1453,6 +1456,9 @@ $app = sub {
 	    if (/^version/) {
 		$psgiresult .= "<status>success</status>\n";
 		$psgiresult .= "<version>".$version."</version>\n";
+		if ($debug > 0) {
+		    $psgiresult .= "<debug>".$debug."</debug>\n";
+		}
 		last ACTION;
 	    }
 	    $psgiresult .= "<status>error</status>\n";
