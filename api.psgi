@@ -6,7 +6,7 @@ use v5.14;
 use Data::UUID;
 
 #-----------------------------
-my $version = "2.0.16";
+my $version = "2.0.17";
 my $i;
 my $action = "null";
 my $snapsource = "null";
@@ -939,7 +939,7 @@ sub senddelta() {
 	$logpath = "/tmp/zfs-list-local.log.".$uuid;
 	
 	# make sure local snapshots exist
-	$spell = "zfs list -t snapshot >".$logpath;
+	$spell = "zfs list -t snapshot | egrep -v 'NAME +USED' >".$logpath;
 	system($spell);
 	open(LOG, "<".$logpath);
 	if ($debug > 1) {
@@ -1019,7 +1019,14 @@ sub senddelta() {
 	    $psgiresult .= "</debug>\n";
 	}
 	$logpath = "/tmp/zfs-list-".$remotedcip.".log.".$uuid;
-	$spell = "ssh ".$remotedcip." zfs list -t snapshot >".$logpath;
+	$spell = "ssh ".$remotedcip." zfs list -t snapshot | egrep -v 'NAME +USED' >".$logpath;
+	if ($debug > 0) {
+	    $psgiresult .= "<debug>\n";
+	    $formattedspell = $spell;
+	    $formattedspell =~ s/&/&amp;/g;
+	    $psgiresult .= "<spell>".$formattedspell."</spell>";
+	    $psgiresult .= "</debug>\n";
+	}
 	system($spell);
 	$firstsnapexists = 0;
 	$secondsnapexists = 0;
