@@ -300,8 +300,76 @@ sub getrelease() {
     }
 }
 
-sub gettargetinfo() {
+sub gettargetconfig()
+{
+    if (not defined($targetname) || $targetname == "null")
+    {
+        $errormessage = "Missing target name";
+        return;
+    }
 
+    my $target = $targetname;
+    my $file = '/etc/ctl.conf';
+    my @target_param_keys = (
+        "initiator-portal", 
+        "portal-group", 
+        "auth-type"
+        );
+    my @lun_param_keys = (
+        "ctl-lun", 
+        "device-id", 
+        "path", 
+        "serial", 
+        "vendor"
+        );
+    my %target_params ("targetname" => "$target");
+    my %lun_params;
+
+    open F, "<", $file or (
+        $errormessage = "could not open $file : $!"
+        and return);
+    my $old_delim = $/;
+    $/ = undef;
+    my $config = <F>;
+    close F;
+    $/ = $old_delim;
+
+    # remove commented lines
+    $config =~ s/#.*?\n//sg;
+
+    # find our target record
+    if($config !~ /target\s+\Q$target\E\s*(.*?)\s+target/s)
+    {
+        $errormessage = "Target $target not found.";
+        return;
+    }
+    $1 =~ /\{(.*)\}/s;
+    $config = $1;
+
+    # look for target parameters
+    foreach (@target_param_keys)
+    {
+        if($config =~ /\Q$_\E\s+(\S+)/s)
+        {
+            $target_params{$_} = $1;
+        }
+    }
+
+    # look for lun 0 parameters
+    $config =~ /lun\s+0\s*\{(.*?)\}/s;
+    my $lun0_config = $1;
+    foreach (@lun_param_keys)
+    {
+        if($lun0_config =~ /\Q$_\E\s+(\S+)/s)
+        {
+            $target_params{$_} = $1;
+        }
+    }
+
+    return %target_params;
+}
+
+sub gettargetinfo() {
     my $ug;
     my $uuid;
     my $ctladmlogpath;
@@ -1534,6 +1602,21 @@ $app = sub {
             if ($result != -1) {
                 $psgiresult .= "<status>success</status>\n";
                 $psgiresult .= "<active>".$result."</active>\n";
+            } else {
+                $psgiresult .= "<status>error</status>\n";
+                $psgiresult .= "<errormessage>".$errormessage."</errormessage>\n";
+            }
+            last ACTION;
+        }
+        if (/^targetconfig/) {
+            my %result = gettargetconfig();
+            if(%result)
+            {
+                $psgiresult .= "<status>success</status>\n";
+                while (my ($key, $val) = each %result)
+                {
+                    $psgiresult .= "<$key>$val</$key>\n";            
+                }
             } else {
                 $psgiresult .= "<status>error</status>\n";
                 $psgiresult .= "<errormessage>".$errormessage."</errormessage>\n";
