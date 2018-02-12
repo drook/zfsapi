@@ -338,7 +338,7 @@ sub gettargetconfig()
     $config =~ s/#.*?\n//sg;
 
     # find our target record
-    if($config !~ /target\s+\Q$target\E\s*(.*?)\s+target/s)
+    if($config !~ /target\s+\Q$target\E\s*(.*?)\s*(?:target|\Z)/s)
     {
         $errormessage = "Target $target not found.";
         return;
