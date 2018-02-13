@@ -322,7 +322,7 @@ sub gettargetconfig()
         "serial", 
         "vendor"
         );
-    my %target_params ("targetname" => "$target");
+    my %target_params = ("targetname" => "$target");
     my %lun_params;
 
     open F, "<", $file or (
