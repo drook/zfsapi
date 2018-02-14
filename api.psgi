@@ -248,6 +248,7 @@ sub getrelease() {
             chomp($line);
 
             if ($line =~ /^[\s\t]*\d+ block/) {
+                $line =~ s/^\s+//;
                 @temp = split(/\s+/, $line);
                 $blockdev = $temp[0];
             } else {
