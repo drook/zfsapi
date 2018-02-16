@@ -247,80 +247,141 @@ sub getrelease() {
     my $vdev;
 
     if (defined($victim) && $victim ne "null") {
-	$ug = Data::UUID -> new;
-	$uuid = $ug -> create_str();
-	
-	$ctladmlogpath = "/tmp/ctladm.log.".$uuid;
-	$spell = $sudopath." /usr/sbin/ctladm devlist -v > ".$ctladmlogpath." 2>&1";
-	system($spell);
-	open(CTLADMLOG, "<", $ctladmlogpath) or return 1;
-	while (!eof(CTLADMLOG) && $devicefound == 0) {
-	    $line = readline(*CTLADMLOG);
-	    chomp($line);
+        $ug = Data::UUID -> new;
+        $uuid = $ug -> create_str();
+        
+        $ctladmlogpath = "/tmp/ctladm.log.".$uuid;
+        $spell = $sudopath." /usr/sbin/ctladm devlist -v > ".$ctladmlogpath." 2>&1";
+        system($spell);
+        open(CTLADMLOG, "<", $ctladmlogpath) or return 1;
+        while (!eof(CTLADMLOG) && $devicefound == 0) {
+            $line = readline(*CTLADMLOG);
+            chomp($line);
 
-	    if ($line =~ /^[\s\t]*\d+ block/) {
-		@temp = split(/ +/, $line);
-		$blockdev = $temp[1];
-	    } else {
-		if ($line =~ /^[\s\t]*file=/) {
-		    @temp = split(/=/, $line);
-		    $vdev = $temp[1];
+            if ($line =~ /^[\s\t]*\d+ block/) {
+                $line =~ s/^\s+//;
+                @temp = split(/\s+/, $line);
+                $blockdev = $temp[0];
+            } else {
+                if ($line =~ /^[\s\t]*file=/) {
+                    @temp = split(/=/, $line);
+                    $vdev = $temp[1];
 
-		    if ($vdev eq '/dev/zvol/'.$victim ) {
-			# we found our victim
-			$devicefound = 1;
-			@time = localtime(time());
-			$time[4]++;
-			$time[5] += 1900;
-			$victimfmt = $victim;
-			$victimfmt =~ s/\//_/g;
-			$logpath = $tmppath."/release-".$victimfmt."-".$time[5]."-".$time[4]."-".$time[3]."-".$time[2]."-".$time[1]."-".$time[0].".log";
-			$spell = $sudopath." /usr/sbin/ctladm remove -b block -l ".$blockdev." >".$logpath." 2>&1";
-			if ($debug > 0) {
-			    $psgiresult .= "<debug>".formatspell($spell)."</debug>\n";
-			}
-			system($spell);
-			parselog();
-		    }
-		}
-	    }
-	    $ctladmlines++;
-	}
-	close(CTLADMLOG);
-	if ($debug == 0) {
-	    unlink($logpath);
-	    unlink($ctladmlogpath);
-	}
-	if ($devicefound == 0) {
-	    $errormessage = "didn't find device to release.";
-	    return 1;
-	}
-	if ($ctladmlines <= 1) {
-	    $errormessage = "ctladm log is empty, check sudo permissions.";
-	    return 1;
-	}
-	if (@logcontents == 1 && $logcontents[0] =~ /LUN \d+ removed successfully/) {
-	    return 0;
-	} else {
-	    $errormessage = "log file tells me something got wrong.";
-	    $psgiresult .= "<log>\n";
-	    $i = 0;
-	    while ($i < @logcontents) {
-	        $psgiresult .= "<entry>".$logcontents[$i]."</entry>\n";
-	        $i++
-	    }
-	    $psgiresult .= "</log>\n";
-
-	    return 1;
-	}
+                    if ($vdev eq '/dev/zvol/'.$victim ) {
+                        # we found our victim
+                        $devicefound = 1;
+                        @time = localtime(time());
+                        $time[4]++;
+                        $time[5] += 1900;
+                        $victimfmt = $victim;
+                        $victimfmt =~ s/\//_/g;
+                        $logpath = $tmppath."/release-".$victimfmt."-".$time[5]."-".$time[4]."-".$time[3]."-".$time[2]."-".$time[1]."-".$time[0].".log";
+                        $spell = $sudopath." /usr/sbin/ctladm remove -b block -l ".$blockdev." >".$logpath." 2>&1";
+                        if ($debug > 0) {
+                            $psgiresult .= "<debug>".formatspell($spell)."</debug>\n";
+                        }
+                        system($spell);
+                        parselog();
+                    }
+                }
+            }
+            $ctladmlines++;
+        }
+        close(CTLADMLOG);
+        if ($debug == 0) {
+            unlink($logpath);
+            unlink($ctladmlogpath);
+        }
+        if (@logcontents == 1 && $logcontents[0] =~ /LUN \d+ removed successfully/) {
+            return 0;
+        } else {
+            $errormessage = "log file tells me something got wrong.";
+            return 1;
+        }
+        if ($devicefound == 0) {
+            $errormessage = "didn't find device to release.";
+            return 1;
+        }
+        if ($ctladmlines <= 1) {
+            $errormessage = "ctladm log is empty, check sudo permissions.";
+            return 1;
+        }
     } else {
         $errormessage = "missing entity name to release.";
         return 1;
     }
 }
 
-sub gettargetinfo() {
+sub gettargetconfig()
+{
+    if (not defined($targetname) || $targetname == "null")
+    {
+        $errormessage = "Missing target name";
+        return;
+    }
 
+    my $target = $targetname;
+    my $file = '/etc/ctl.conf';
+    my @target_param_keys = (
+        "initiator-portal", 
+        "portal-group", 
+        "auth-type"
+        );
+    my @lun_param_keys = (
+        "ctl-lun", 
+        "device-id", 
+        "path", 
+        "serial", 
+        "vendor"
+        );
+    my %target_params = ("targetname" => "$target");
+    my %lun_params;
+
+    open F, "<", $file or (
+        $errormessage = "could not open $file : $!"
+        and return);
+    my $old_delim = $/;
+    $/ = undef;
+    my $config = <F>;
+    close F;
+    $/ = $old_delim;
+
+    # remove commented lines
+    $config =~ s/#.*?\n//sg;
+
+    # find our target record
+    if($config !~ /target\s+\Q$target\E\s*(.*?)\s*(?:target|\Z)/s)
+    {
+        $errormessage = "Target $target not found.";
+        return;
+    }
+    $1 =~ /\{(.*)\}/s;
+    $config = $1;
+
+    # look for target parameters
+    foreach (@target_param_keys)
+    {
+        if($config =~ /\Q$_\E\s+(\S+)/s)
+        {
+            $target_params{$_} = $1;
+        }
+    }
+
+    # look for lun 0 parameters
+    $config =~ /lun\s+0\s*\{(.*?)\}/s;
+    my $lun0_config = $1;
+    foreach (@lun_param_keys)
+    {
+        if($lun0_config =~ /\Q$_\E\s+(\S+)/s)
+        {
+            $target_params{$_} = $1;
+        }
+    }
+
+    return %target_params;
+}
+
+sub gettargetinfo() {
     my $ug;
     my $uuid;
     my $ctladmlogpath;
@@ -1474,179 +1535,224 @@ $app = sub {
     getxmlhead();
     $psgiresult .= "<action>".$action."</action>\n";
     ACTION:
-	for ($action) {
-	    if (/^snapshot/) {
-		$psgiresult .= "<snapsource>".$snapsource."</snapsource>\n";
-		$psgiresult .= "<snapname>".$snapname."</snapname>\n";
-		$result = getsnapshot();
-		handleresult();
-		last ACTION;
-	    }
-	    if (/^bookmark/) {
-		$psgiresult .= "<snapsource>".$snapsource."</snapsource>\n";
-		$psgiresult .= "<bookmarkname>".$snapname."</bookmarkname>\n";
-		$result = getbookmark();
-		handleresult();
-		last ACTION;
-	    }
-	    if (/^clone/) {
-		$psgiresult .= "<clonesource>".$clonesource."</clonesource>\n";
-		$psgiresult .= "<clonename>".$clonename."</clonename>\n";
-		$result = getclone();
-		handleresult();
-		last ACTION;
-	    }
-	    if (/^destroy/) {
-		$psgiresult .= "<victim>".$victim."</victim>\n";
-		$result = destroyentity();
-		handleresult();
-		last ACTION;
-	    }
-	    if (/^status/) {
-		$result = getstatus();
-		handlestatus();
-		last ACTION;
-	    }
-	    if (/^targetmount/) {
-		$psgiresult .= "<targetname>".$targetname."</targetname>\n";
-		$psgiresult .= "<device>".$device."</device>\n";
-		$psgiresult .= "<lun>".$lun."</lun>\n";
-		$result = mounttarget();
-		if ($result == 0) {
-		    $psgiresult .= "<status>success</status>\n";
-		} else {
-		    $psgiresult .= "<status>error</status>\n";
-		}
-		last ACTION;
-	    }
-	    if (/^targetenable/) {
-		$psgiresult .= "<targetname>".$targetname."</targetname>\n";
-		$result = enabletarget();
-		if ($result == 0) {
-		    $psgiresult .= "<status>success</status>\n";
-		} else {
-		    $psgiresult .= "<status>error</status>\n";
-		    $psgiresult .= "<errormessage>".$errormessage."</errormessage>\n";
-		}
-		last ACTION;
-	    }
-	    if (/^targetdisable/) {
-		$psgiresult .= "<targetname>".$targetname."</targetname>\n";
-		$result = disabletarget();
-		if ($result == 0) {
-		    $psgiresult .= "<status>success</status>\n";
-		} else {
-		    $psgiresult .= "<debug>result:".$result."</debug>\n";
-		    $psgiresult .= "<status>error</status>\n";
-		    $psgiresult .= "<errormessage>".$errormessage."</errormessage>\n";
-		}
-		last ACTION;
-	    }
-	    if (/^release/) {
-		$psgiresult .= "<victim>".$victim."</victim>\n";
-		$result = getrelease();
-		if ($result == 0) {
-		    $psgiresult .= "<status>success</status>\n";
-		} else {
-		    $psgiresult .= "<status>error</status>\n";
-		    $psgiresult .= "<errormessage>".$errormessage."</errormessage>\n";
-		}
-		last ACTION;
-	    }
-	    if (/^reload/) {
-		$result = getreload();
-		if ($result == 0) {
-		    $psgiresult .= "<status>success</status>\n";
-		} else {
-		    $psgiresult .= "<status>error</status>\n";
-		    $psgiresult .= "<errormessage>".$errormessage."</errormessage>\n";
-		}
-		last ACTION;
-	    }
-	    if (/^send$/) {
-		$psgiresult .= "<startsnapshot>".$startsnapshot."</startsnapshot>\n";
-		$psgiresult .= "<endsnapshot>".$endsnapshot."</endsnapshot>\n";
-		$psgiresult .= "<remotedcip>".$remotedcip."</remotedcip>\n";
-		$psgiresult .= "<remotedataset>".$remotedataset."</remotedataset>\n";
-		$result = senddelta();
-		if ($result == 0) {
-		    $psgiresult .= "<status>success</status>\n";
-		} else {
-		    $psgiresult .= "<status>error</status>\n";
-		    $psgiresult .= "<errormessage>".$errormessage."</errormessage>\n";
-		}
-		last ACTION;
-	    }
-	    if (/^sendlist/) {
-		$result = getsendingstatus();
-		if ($result != -1) {
-		    $psgiresult .= "<status>success</status>\n";
-		    $psgiresult .= "<sendingprocesses>".$result."</sendingprocesses>\n";
-		} else {
-		    $psgiresult .= "<status>error</status>\n";
-		    $psgiresult .= "<errormessage>".$errormessage."</errormessage>\n";
-		}
-		last ACTION;
-	    }
-	    if (/^senddetails/) {
-		$psgiresult .= "<startsnapshot>".$startsnapshot."</startsnapshot>\n";
-		$psgiresult .= "<endsnapshot>".$endsnapshot."</endsnapshot>\n";
-		$psgiresult .= "<remotedcip>".$remotedcip."</remotedcip>\n";
-		$result = getsendingdetails();
-		if ($result != -1) {
-		    $psgiresult .= "<status>success</status>\n";
-		    $psgiresult .= "<sendingprocesses>".$result."</sendingprocesses>\n";
-		} else {
-		    $psgiresult .= "<status>error</status>\n";
-		    $psgiresult .= "<errormessage>".$errormessage."</errormessage>\n";
-		}
-		last ACTION;
-	    }
-	    if (/^receivelist/) {
-		$result = getreceivingstatus();
-		if ($result != -1) {
-		    $psgiresult .= "<status>success</status>\n";
-		    $psgiresult .= "<active>".$result."</active>\n";
-		} else {
-		    $psgiresult .= "<status>error</status>\n";
-		    $psgiresult .= "<errormessage>".$errormessage."</errormessage>\n";
-		}
-		last ACTION;
-	    }
-	    if (/^targetinfo/) {
-	        $result = gettargetinfo();
-		if ($result != -1) {
-		    $psgiresult .= "<status>success</status>\n";
-		    $psgiresult .= "<targetname>".$targetname."</targetname>\n";
-		    $psgiresult .= "<targetinfo>".$result."</targetinfo>\n";
-		} else {
-		    $psgiresult .= "<status>error</status>\n";
-		    $psgiresult .= "<errormessage>".$errormessage."</errormessage>\n";
-		}
-		last ACTION;
-	    }
-	    if (/^rollback/) {
-		$psgiresult .= "<snapshot>".$snapshot."</snapshot>\n";
-	        $result = getrollback();
-		if ($result == 0) {
-		    $psgiresult .= "<status>success</status>\n";
-		} else {
-		    $psgiresult .= "<status>error</status>\n";
-		    $psgiresult .= "<errormessage>".$errormessage."</errormessage>\n";
-		}
-		last ACTION;
-	    }
-	    if (/^version/) {
-		$psgiresult .= "<status>success</status>\n";
-		$psgiresult .= "<version>".$version."</version>\n";
-		if ($debug > 0) {
-		    $psgiresult .= "<debug>".$debug."</debug>\n";
-		}
-		last ACTION;
-	    }
-	    $psgiresult .= "<status>error</status>\n";
-	    $psgiresult .= "<status>You have requested something that I don't understand.</status>\n";
-	}
+    for ($action) {
+        if (/^snapshot/) {
+            $psgiresult .= "<snapsource>".$snapsource."</snapsource>\n";
+            $psgiresult .= "<snapname>".$snapname."</snapname>\n";
+            $result = getsnapshot();
+            handleresult();
+            last ACTION;
+        }
+        if (/^bookmark/) {
+            $psgiresult .= "<snapsource>".$snapsource."</snapsource>\n";
+            $psgiresult .= "<bookmarkname>".$snapname."</bookmarkname>\n";
+            $result = getbookmark();
+            handleresult();
+            last ACTION;
+        }
+        if (/^clone/) {
+            $psgiresult .= "<clonesource>".$clonesource."</clonesource>\n";
+            $psgiresult .= "<clonename>".$clonename."</clonename>\n";
+            $result = getclone();
+            handleresult();
+            last ACTION;
+        }
+        if (/^destroy/) {
+            $psgiresult .= "<victim>".$victim."</victim>\n";
+            $result = destroyentity();
+            handleresult();
+            last ACTION;
+        }
+        if (/^status/) {
+            $result = getstatus();
+            handlestatus();
+            last ACTION;
+        }
+        if (/^targetmount/) {
+            $psgiresult .= "<targetname>".$targetname."</targetname>\n";
+            $psgiresult .= "<device>".$device."</device>\n";
+            $psgiresult .= "<lun>".$lun."</lun>\n";
+            $result = mounttarget();
+            if ($result == 0) {
+                $psgiresult .= "<status>success</status>\n";
+            } else {
+                $psgiresult .= "<status>error</status>\n";
+            }
+            last ACTION;
+        }
+        if (/^targetenable/) {
+            $psgiresult .= "<targetname>".$targetname."</targetname>\n";
+            $result = enabletarget();
+            if ($result == 0) {
+                $psgiresult .= "<status>success</status>\n";
+            } else {
+                $psgiresult .= "<status>error</status>\n";
+                $psgiresult .= "<errormessage>".$errormessage."</errormessage>\n";
+            }
+            last ACTION;
+        }
+        if (/^targetdisable/) {
+            $psgiresult .= "<targetname>".$targetname."</targetname>\n";
+            $result = disabletarget();
+            if ($result == 0) {
+                $psgiresult .= "<status>success</status>\n";
+            } else {
+                $psgiresult .= "<debug>result:".$result."</debug>\n";
+                $psgiresult .= "<status>error</status>\n";
+                $psgiresult .= "<errormessage>".$errormessage."</errormessage>\n";
+            }
+            last ACTION;
+        }
+        if (/^release/) {
+            $psgiresult .= "<victim>".$victim."</victim>\n";
+            $result = getrelease();
+            if ($result == 0) {
+                $psgiresult .= "<status>success</status>\n";
+            } else {
+                $psgiresult .= "<status>error</status>\n";
+                $psgiresult .= "<errormessage>".$errormessage."</errormessage>\n";
+                if (@logcontents > 0) {
+                    $psgiresult .= "<log>\n";
+                    $i = 0;
+                    while ($i < @logcontents) {
+                        $psgiresult .= "<entry>".$logcontents[$i]."</entry>\n";
+                        $i++
+                    }
+                    $psgiresult .= "</log>\n";
+                }
+            }
+            last ACTION;
+        }
+        if (/^reload/) {
+            $result = getreload();
+            if ($result == 0) {
+                $psgiresult .= "<status>success</status>\n";
+            } else {
+                $psgiresult .= "<status>error</status>\n";
+                $psgiresult .= "<errormessage>".$errormessage."</errormessage>\n";
+            }
+            last ACTION;
+        }
+        if (/^send$/) {
+            $psgiresult .= "<startsnapshot>".$startsnapshot."</startsnapshot>\n";
+            $psgiresult .= "<endsnapshot>".$endsnapshot."</endsnapshot>\n";
+            $psgiresult .= "<remotedcip>".$remotedcip."</remotedcip>\n";
+            $psgiresult .= "<remotedataset>".$remotedataset."</remotedataset>\n";
+            $result = senddelta();
+            if ($result == 0) {
+                $psgiresult .= "<status>success</status>\n";
+            } else {
+                $psgiresult .= "<status>error</status>\n";
+                $psgiresult .= "<errormessage>".$errormessage."</errormessage>\n";
+            }
+            last ACTION;
+        }
+        if (/^sendlist/) {
+            $result = getsendingstatus();
+            if ($result != -1) {
+                $psgiresult .= "<status>success</status>\n";
+                $psgiresult .= "<sendingprocesses>".$result."</sendingprocesses>\n";
+            } else {
+                $psgiresult .= "<status>error</status>\n";
+                $psgiresult .= "<errormessage>".$errormessage."</errormessage>\n";
+            }
+            last ACTION;
+        }
+        if (/^senddetails/) {
+            $psgiresult .= "<startsnapshot>".$startsnapshot."</startsnapshot>\n";
+            $psgiresult .= "<endsnapshot>".$endsnapshot."</endsnapshot>\n";
+            $psgiresult .= "<remotedcip>".$remotedcip."</remotedcip>\n";
+            $result = getsendingdetails();
+            if ($result != -1) {
+                $psgiresult .= "<status>success</status>\n";
+                $psgiresult .= "<sendingprocesses>".$result."</sendingprocesses>\n";
+            } else {
+                $psgiresult .= "<status>error</status>\n";
+                $psgiresult .= "<errormessage>".$errormessage."</errormessage>\n";
+            }
+            last ACTION;
+        }
+        if (/^receivelist/) {
+            $result = getreceivingstatus();
+            if ($result != -1) {
+                $psgiresult .= "<status>success</status>\n";
+                $psgiresult .= "<active>".$result."</active>\n";
+            } else {
+                $psgiresult .= "<status>error</status>\n";
+                $psgiresult .= "<errormessage>".$errormessage."</errormessage>\n";
+            }
+            last ACTION;
+        }
+        if (/^targetconfig/) {
+            my %result = gettargetconfig();
+            if(%result)
+            {
+                $psgiresult .= "<status>success</status>\n";
+                while (my ($key, $val) = each %result)
+                {
+                    $psgiresult .= "<$key>$val</$key>\n";            
+                }
+            } else {
+                $psgiresult .= "<status>error</status>\n";
+                $psgiresult .= "<errormessage>".$errormessage."</errormessage>\n";
+            }
+            last ACTION;
+        }
+        if (/^targetinfo/) {
+            $result = gettargetinfo();
+            if ($result != -1) {
+                $psgiresult .= "<status>success</status>\n";
+                $psgiresult .= "<targetname>".$targetname."</targetname>\n";
+                $psgiresult .= "<targetinfo>".$result."</targetinfo>\n";
+                $psgiresult .= "<lunidinfo>".$lunidinfo."</lunidinfo>\n";
+                $psgiresult .= "<deviceidinfo>".$deviceidinfo."</deviceidinfo>\n";
+                $psgiresult .= "<vendorinfo>".$vendorinfo."</vendorinfo>\n";
+            } else {
+                $psgiresult .= "<status>error</status>\n";
+                $psgiresult .= "<errormessage>".$errormessage."</errormessage>\n";
+            }
+            last ACTION;
+        }
+        if (/^rollback/) {
+            $psgiresult .= "<snapshot>".$snapshot."</snapshot>\n";
+            $result = getrollback();
+            if ($result != -1) {
+                $psgiresult .= "<status>success</status>\n";
+            } else {
+                $psgiresult .= "<status>error</status>\n";
+                $psgiresult .= "<errormessage>".$errormessage."</errormessage>\n";
+            }
+            last ACTION;
+        }
+        if (/^version/) {
+            $psgiresult .= "<status>success</status>\n";
+            $psgiresult .= "<version>".$version."</version>\n";
+            last ACTION;
+        }
+        if (/^targetcreate/) {
+            $psgiresult .= "<targetname>".$targetname."</targetname>\n";
+            $psgiresult .= "<deviceid>".$deviceid."</deviceid>\n";
+            $psgiresult .= "<scsiname>".$scsiname."</scsiname>\n";
+            $psgiresult .= "<lunid>".$lunid."</lunid>\n";
+            $psgiresult .= "<vendor>".$vendor."</vendor>\n";
+            $result = targetcreate();
+            if ($result == 0) {
+                $psgiresult .= "<status>success</status>\n";
+                if($warningmessage ne "") {
+                    $psgiresult .= "<warning>".$warningmessage."</warning>\n";
+                }
+                if($infomessage ne "") {
+                    $psgiresult .= "<info>".$infomessage."</info>\n";
+                }
+            } else {
+                $psgiresult .= "<status>error</status>\n";
+                $psgiresult .= "<errormessage>".$errormessage."</errormessage>\n";
+            }
+            last ACTION;
+        }
+        $psgiresult .= "<status>error</status>\n";
+        $psgiresult .= "<status>You have requested something that I don't understand.</status>\n";
+    }
     getxmlfoot();
 
     return [
