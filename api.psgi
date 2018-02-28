@@ -6,7 +6,7 @@ use v5.14;
 use Data::UUID;
 
 #-----------------------------
-my $version = "2.0.20";
+my $version = "2.0.21";
 my $i;
 my $action = "null";
 my $snapsource = "null";
@@ -249,7 +249,7 @@ sub getrelease() {
     if (defined($victim) && $victim ne "null") {
         $ug = Data::UUID -> new;
         $uuid = $ug -> create_str();
-        
+
         $ctladmlogpath = "/tmp/ctladm.log.".$uuid;
         $spell = $sudopath." /usr/sbin/ctladm devlist -v > ".$ctladmlogpath." 2>&1";
         system($spell);
@@ -312,10 +312,8 @@ sub getrelease() {
     }
 }
 
-sub gettargetconfig()
-{
-    if (not defined($targetname) || $targetname == "null")
-    {
+sub gettargetconfig() {
+    if (not defined($targetname) || $targetname == "null") {
         $errormessage = "Missing target name";
         return;
     }
@@ -350,8 +348,7 @@ sub gettargetconfig()
     $config =~ s/#.*?\n//sg;
 
     # find our target record
-    if($config !~ /target\s+\Q$target\E\s*(.*?)\s*(?:target|\Z)/s)
-    {
+    if($config !~ /target\s+\Q$target\E\s*(.*?)\s*(?:target|\Z)/s) {
         $errormessage = "Target $target not found.";
         return;
     }
@@ -359,10 +356,8 @@ sub gettargetconfig()
     $config = $1;
 
     # look for target parameters
-    foreach (@target_param_keys)
-    {
-        if($config =~ /\Q$_\E\s+(\S+)/s)
-        {
+    foreach (@target_param_keys) {
+        if($config =~ /\Q$_\E\s+(\S+)/s) {
             $target_params{$_} = $1;
         }
     }
@@ -370,10 +365,8 @@ sub gettargetconfig()
     # look for lun 0 parameters
     $config =~ /lun\s+0\s*\{(.*?)\}/s;
     my $lun0_config = $1;
-    foreach (@lun_param_keys)
-    {
-        if($lun0_config =~ /\Q$_\E\s+(\S+)/s)
-        {
+    foreach (@lun_param_keys) {
+        if($lun0_config =~ /\Q$_\E\s+(\S+)/s) {
             $target_params{$_} = $1;
         }
     }
@@ -396,7 +389,7 @@ sub gettargetinfo() {
     if (defined($targetname) && $targetname ne "null") {
     $ug = Data::UUID -> new;
     $uuid = $ug -> create_str();
-    
+
     $ctladmlogpath = "/tmp/ctladm.log.".$uuid;
     $spell = $sudopath." /usr/sbin/ctladm devlist -v > ".$ctladmlogpath." 2>&1";
     system($spell);
@@ -411,27 +404,26 @@ sub gettargetinfo() {
         $lunidinfo = $temp[1];
         $deviceidinfo = $temp[7];
         } else {
-        if ($line =~ /^[\s\t]*ctld_name=/) {
-            @temp = split(/=/, $line);
-            $ctldname = $temp[1];
+	    if ($line =~ /^[\s\t]*ctld_name=/) {
+        	@temp = split(/=/, $line);
+        	$ctldname = $temp[1];
 
-            if ($ctldname =~ /$targetname,lun,\d+/) {
-            # we found our target
-            $devicefound = 1;
-            } else {
-            }
-        } else {
-            if ($line =~ /^[\s\t]*file=\/dev\/zvol\/.+/) {
-            @temp = split(/=/, $line);
-            $device = @temp[1];
-            }
-            else { 
-                if ($line =~ /^[\s\t]*vendor=/) {
-                    @temp = split(/=/, $line);
-                    $vendorinfo = @temp[1];
-                }
-            }
-        }
+        	if ($ctldname =~ /$targetname,lun,\d+/) {
+        	    # we found our target
+        	    $devicefound = 1;
+        	} else {
+        	}
+    	    } else {
+        	if ($line =~ /^[\s\t]*file=\/dev\/zvol\/.+/) {
+        	    @temp = split(/=/, $line);
+        	    $device = @temp[1];
+        	} else { 
+            	    if ($line =~ /^[\s\t]*vendor=/) {
+                	@temp = split(/=/, $line);
+                	$vendorinfo = @temp[1];
+            	    }
+        	}
+    	    }
         }
         $ctladmlines++;
     }
