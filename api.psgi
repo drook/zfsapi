@@ -6,7 +6,7 @@ use v5.14;
 use Data::UUID;
 
 #-----------------------------
-my $version = "2.0.19";
+my $version = "2.0.20";
 my $i;
 my $action = "null";
 my $snapsource = "null";
@@ -563,9 +563,9 @@ sub enabletarget() {
     if ($debug > 0) {
         $psgiresult .= "<debug>returning 0</debug>\n";
     }
+    $spell = $sudopath." /usr/sbin/chown zfsreplica:www ".$ctlconfpath;
+    system($spell);
     if ($debug == 0) {
-        $spell = $sudopath." /usr/sbin/chown zfsreplica:www ".$ctlconfpath;
-        system($spell);
         unlink($ctlconfpath);
         #unlink($logpath);
     }
@@ -639,9 +639,9 @@ sub disabletarget() {
     system($spell);
     $spell = $sudopath." /bin/mv ".$ctlconfpath.".new /etc/ctl.conf";
     system($spell);
+    $spell = $sudopath." /usr/sbin/chown zfsreplica:www ".$ctlconfpath;
+    system($spell);
     if ($debug == 0) {
-        $spell = $sudopath." /usr/sbin/chown zfsreplica:www ".$ctlconfpath;
-        system($spell);
         unlink($ctlconfpath);
         #unlink($logpath);
         }
@@ -721,9 +721,9 @@ sub mounttarget() {
     system($spell);
     $spell = $sudopath." /bin/mv ".$ctlconfpath.".new /etc/ctl.conf";
     system($spell);
+    $spell = $sudopath." /usr/sbin/chown zfsreplica:www ".$ctlconfpath;
+    system($spell);
     if ($debug == 0) {
-        $spell = $sudopath." /usr/sbin/chown zfsreplica:www ".$ctlconfpath;
-        system($spell);
         unlink($ctlconfpath);
         #unlink($logpath);
     }
