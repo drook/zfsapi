@@ -317,9 +317,9 @@ sub gettargetconfig() {
         $errormessage = "Missing target name";
         return;
     }
-
     my $target = $targetname;
     my $file = '/etc/ctl.conf';
+
     my @target_param_keys = (
         "initiator-portal", 
         "portal-group", 
@@ -335,14 +335,13 @@ sub gettargetconfig() {
     my %target_params = ("targetname" => "$target");
     my %lun_params;
 
-    open F, "<", $file or (
-        $errormessage = "could not open $file : $!"
-        and return);
-    my $old_delim = $/;
-    $/ = undef;
-    my $config = <F>;
-    close F;
-    $/ = $old_delim;
+    my $errmsg = 'SuDoCaTeRrOr';
+    my $config = `sudo cat "$file" 2>&1 || echo "$errmsg"`;
+    if($config =~ $errmsg)
+    {
+      $errormessage = $config;
+      return;
+    }
 
     # remove commented lines
     $config =~ s/#.*?\n//sg;
