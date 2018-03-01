@@ -6,7 +6,7 @@ use v5.14;
 use Data::UUID;
 
 #-----------------------------
-my $version = "2.0.21";
+my $version = "2.0.22";
 my $i;
 my $action = "null";
 my $snapsource = "null";
@@ -112,24 +112,24 @@ sub getsnapshot() {
     $time[4]++;
     $time[5] += 1900;
     if (defined($snapsource) && defined($snapname) && $snapsource ne "null" && $snapname ne "null") {
-    $snapsourcefmt = $snapsource;
-    $snapsourcefmt =~ s/\//_/g;
-    $logpath = $tmppath."/snapshot-".$snapsourcefmt."-".$snapname."-".$time[5]."-".$time[4]."-".$time[3]."-".$time[2]."-".$time[1]."-".$time[0].".log";
-    $spell = $sudopath." /sbin/zfs snapshot ".$snapsource."@".$snapname." >".$logpath." 2>&1";
-    system($spell);
-    parselog();
-    if (@logcontents > 0) {
-        $errormessage = "log file not empty.";
-        return 1;
+	$snapsourcefmt = $snapsource;
+	$snapsourcefmt =~ s/\//_/g;
+	$logpath = $tmppath."/snapshot-".$snapsourcefmt."-".$snapname."-".$time[5]."-".$time[4]."-".$time[3]."-".$time[2]."-".$time[1]."-".$time[0].".log";
+	$spell = $sudopath." /sbin/zfs snapshot ".$snapsource."@".$snapname." >".$logpath." 2>&1";
+	system($spell);
+	parselog();
+	if (@logcontents > 0) {
+	    $errormessage = "log file not empty.";
+	return 1;
+	} else {
+	    if ($debug == 0) {
+		#unlink($logpath);
+	    }
+	    return 0;
+	}
     } else {
-        if ($debug == 0) {
-        #unlink($logpath);
-        }
-        return 0;
-    }
-    } else {
-    $errormessage = "missing snapshot source or snapshot name.";
-    return 1;
+	$errormessage = "missing snapshot source or snapshot name.";
+	return 1;
     }
 }
 
@@ -142,26 +142,26 @@ sub getbookmark() {
     $time[4]++;
     $time[5] += 1900;
     if (defined($snapsource) && defined($bookmarkname) && $snapsource ne "null" && $bookmarkname ne "null") {
-    @tmp = split(/@/, $snapsource);
-    $source = $tmp[0];
-    $snapsourcefmt = $snapsource;
-    $snapsourcefmt =~ s/\//_/g;
-    $logpath = $tmppath."/bookmark-".$snapsourcefmt."-".$bookmarkname."-".$time[5]."-".$time[4]."-".$time[3]."-".$time[2]."-".$time[1]."-".$time[0].".log";
-    $spell = $sudopath." /sbin/zfs bookmark ".$snapsource." ".$source."#".$bookmarkname." >".$logpath." 2>&1";
-    system($spell);
-    parselog();
-    if (@logcontents > 0) {
-        $errormessage = "log file not empty.";
-        return 1;
+	@tmp = split(/@/, $snapsource);
+	$source = $tmp[0];
+	$snapsourcefmt = $snapsource;
+	$snapsourcefmt =~ s/\//_/g;
+	$logpath = $tmppath."/bookmark-".$snapsourcefmt."-".$bookmarkname."-".$time[5]."-".$time[4]."-".$time[3]."-".$time[2]."-".$time[1]."-".$time[0].".log";
+	$spell = $sudopath." /sbin/zfs bookmark ".$snapsource." ".$source."#".$bookmarkname." >".$logpath." 2>&1";
+	system($spell);
+	parselog();
+	if (@logcontents > 0) {
+	    $errormessage = "log file not empty.";
+	    return 1;
+	} else {
+	    if ($debug == 0) {
+		#unlink($logpath);
+	    }
+	    return 0;
+	}
     } else {
-        if ($debug == 0) {
-        #unlink($logpath);
-        }
-        return 0;
-    }
-    } else {
-    $errormessage = "missing snapshot source or bookmark name.";
-    return 1;
+	$errormessage = "missing snapshot source or bookmark name.";
+	return 1;
     }
 }
 
@@ -171,25 +171,25 @@ sub getclone() {
     $time[4]++;
     $time[5] += 1900;
     if (defined($clonesource) && defined($clonename) && $clonesource ne "null" && $clonename ne "null") {
-    $clonesourcefmt = $clonesource;
-    $clonesourcefmt =~ s/\//_/g;
-    $clonenamefmt =~ s/\//_/g;
-    $logpath = $tmppath."/clone-".$clonesourcefmt."-".$clonenamefmt."-".$time[5]."-".$time[4]."-".$time[3]."-".$time[2]."-".$time[1]."-".$time[0].".log";
-    $spell = $sudopath." /sbin/zfs clone ".$clonesource." ".$clonename." >".$logpath." 2>&1";
-    system($spell);
-    parselog();
-    if ($debug == 0) {
-        #unlink($logpath);
-        }
-    if (@logcontents > 0) {
-        $errormessage = "log file not empty.";
-        return 1;
+	$clonesourcefmt = $clonesource;
+	$clonesourcefmt =~ s/\//_/g;
+	$clonenamefmt =~ s/\//_/g;
+	$logpath = $tmppath."/clone-".$clonesourcefmt."-".$clonenamefmt."-".$time[5]."-".$time[4]."-".$time[3]."-".$time[2]."-".$time[1]."-".$time[0].".log";
+	$spell = $sudopath." /sbin/zfs clone ".$clonesource." ".$clonename." >".$logpath." 2>&1";
+	system($spell);
+	parselog();
+	if ($debug == 0) {
+	    #unlink($logpath);
+	}
+	if (@logcontents > 0) {
+	    $errormessage = "log file not empty.";
+	    return 1;
+	} else {
+	    return 0;
+	}
     } else {
-        return 0;
-    }
-    } else {
-    $errormessage = "missing snapshot source or snapshot name.";
-    return 1;
+	$errormessage = "missing snapshot source or snapshot name.";
+	return 1;
     }
 }
 
@@ -203,7 +203,7 @@ sub getstatus() {
     system($spell);
     parselog();
     if ($debug == 0) {
-    #unlink($logpath);
+	#unlink($logpath);
     }
     return 0;
 }
@@ -218,7 +218,7 @@ sub getreload() {
     system($spell);
     parselog();
     if ($debug == 0) {
-    #unlink($logpath);
+	#unlink($logpath);
     }
     return 0;
 }
@@ -387,67 +387,67 @@ sub gettargetinfo() {
     my $ctldname;
 
     if (defined($targetname) && $targetname ne "null") {
-    $ug = Data::UUID -> new;
-    $uuid = $ug -> create_str();
+	$ug = Data::UUID -> new;
+	$uuid = $ug -> create_str();
 
-    $ctladmlogpath = "/tmp/ctladm.log.".$uuid;
-    $spell = $sudopath." /usr/sbin/ctladm devlist -v > ".$ctladmlogpath." 2>&1";
-    system($spell);
-    open(CTLADMLOG, "<", $ctladmlogpath) or return 1;
-    while (!eof(CTLADMLOG) && $devicefound == 0) {
-        $line = readline(*CTLADMLOG);
-        chomp($line);
+	$ctladmlogpath = "/tmp/ctladm.log.".$uuid;
+	$spell = $sudopath." /usr/sbin/ctladm devlist -v > ".$ctladmlogpath." 2>&1";
+	system($spell);
+	open(CTLADMLOG, "<", $ctladmlogpath) or return 1;
+	while (!eof(CTLADMLOG) && $devicefound == 0) {
+	    $line = readline(*CTLADMLOG);
+	    chomp($line);
 
-        if ($line =~ /^[\s\t]*\d+ block/) {
-        @temp = split(/ +/, $line);
-        $blockdev = $temp[0];
-        $lunidinfo = $temp[1];
-        $deviceidinfo = $temp[7];
-        } else {
-	    if ($line =~ /^[\s\t]*ctld_name=/) {
-        	@temp = split(/=/, $line);
-        	$ctldname = $temp[1];
-
-        	if ($ctldname =~ /$targetname,lun,\d+/) {
-        	    # we found our target
-        	    $devicefound = 1;
-        	} else {
-        	}
-    	    } else {
-        	if ($line =~ /^[\s\t]*file=\/dev\/zvol\/.+/) {
+	    if ($line =~ /^[\s\t]*\d+ block/) {
+		@temp = split(/ +/, $line);
+		$blockdev = $temp[0];
+		$lunidinfo = $temp[1];
+		$deviceidinfo = $temp[7];
+	    } else {
+		if ($line =~ /^[\s\t]*ctld_name=/) {
         	    @temp = split(/=/, $line);
-        	    $device = @temp[1];
-        	} else { 
-            	    if ($line =~ /^[\s\t]*vendor=/) {
-                	@temp = split(/=/, $line);
-                	$vendorinfo = @temp[1];
-            	    }
-        	}
-    	    }
-        }
-        $ctladmlines++;
-    }
-    close(CTLADMLOG);
-    if ($debug == 0) {
-        #unlink($logpath);
-        unlink($ctladmlogpath);
-    }
+        	    $ctldname = $temp[1];
 
-    if ($devicefound != 0) {
-        return $device;
-    }
+        	    if ($ctldname =~ /$targetname,lun,\d+/) {
+        		# we found our target
+        		$devicefound = 1;
+        	    } else {
+        	    }
+		} else {
+        	    if ($line =~ /^[\s\t]*file=\/dev\/zvol\/.+/) {
+        		@temp = split(/=/, $line);
+        		$device = @temp[1];
+        	    } else { 
+            		if ($line =~ /^[\s\t]*vendor=/) {
+                	    @temp = split(/=/, $line);
+                	    $vendorinfo = @temp[1];
+            		}
+        	    }
+		}
+	    }
+	    $ctladmlines++;
+	}
+	close(CTLADMLOG);
+	if ($debug == 0) {
+	    #unlink($logpath);
+	    unlink($ctladmlogpath);
+	}
 
-    if ($devicefound == 0) {
-        $errormessage = "didn't find requested the device this target is serving.";
-        return -1;
-    }
-    if ($ctladmlines <= 1) {
-        $errormessage = "ctladm log is empty, check sudo permissions.";
-        return -1;
-    }
+	if ($devicefound != 0) {
+	    return $device;
+	}
+
+	if ($devicefound == 0) {
+	    $errormessage = "didn't find requested the device this target is serving.";
+	    return -1;
+	}
+	if ($ctladmlines <= 1) {
+	    $errormessage = "ctladm log is empty, check sudo permissions.";
+	    return -1;
+	}
     } else {
-    $errormessage = "missing target name to get info about.";
-    return -1;
+	$errormessage = "missing target name to get info about.";
+	return -1;
     }
 }
 
@@ -457,24 +457,24 @@ sub destroyentity() {
     $time[4]++;
     $time[5] += 1900;
     if (defined($victim)) {
-    $victimfmt = $victim;
-    $victimfmt =~ s/\//_/g;
-    $logpath = $tmppath."/destroy-".$victimfmt."-".$time[5]."-".$time[4]."-".$time[3]."-".$time[2]."-".$time[1]."-".$time[0].".log";
-    $spell = $sudopath." /sbin/zfs destroy ".$victim." >".$logpath." 2>&1";
-    system($spell);
-    parselog();
-    if ($debug == 0) {
-        #unlink($logpath);
-    }
-    if (@logcontents > 0) {
-        $errormessage = "log file not empty.";
-        return 1;
+	$victimfmt = $victim;
+	$victimfmt =~ s/\//_/g;
+	$logpath = $tmppath."/destroy-".$victimfmt."-".$time[5]."-".$time[4]."-".$time[3]."-".$time[2]."-".$time[1]."-".$time[0].".log";
+	$spell = $sudopath." /sbin/zfs destroy ".$victim." >".$logpath." 2>&1";
+	system($spell);
+	parselog();
+	if ($debug == 0) {
+	    #unlink($logpath);
+	}
+	if (@logcontents > 0) {
+	    $errormessage = "log file not empty.";
+	    return 1;
+	} else {
+	    return 0;
+	}
     } else {
-        return 0;
-    }
-    } else {
-    $errormessage = "missing entity name to destroy.";
-    return 1;
+	$errormessage = "missing entity name to destroy.";
+	return 1;
     }
 }
 
@@ -500,8 +500,8 @@ sub getrollback() {
 	    return 0;
 	}
     } else {
-    $errormessage = "missing snapshot name to rollback to.";
-    return 1;
+	$errormessage = "missing snapshot name to rollback to.";
+	return 1;
     }
 }
 
@@ -514,60 +514,60 @@ sub enabletarget() {
     my $targetfound = 0;
 
     if (defined($targetname)) {
-    $ug = Data::UUID -> new;
-    $uuid = $ug -> create_str();
-    $ctlconfpath = "/tmp/ctl.conf.".$uuid;
-    $spell = $sudopath." /bin/cp /etc/ctl.conf ".$ctlconfpath;
-    system($spell);
-    $spell = $sudopath." /bin/chmod 644 ".$ctlconfpath;
-    system($spell);
-    open(CTLCONF, "<", $ctlconfpath) or return 1;
-    open(CTLCONFNEW, ">", $ctlconfpath.".new") or return 1;
-    while (!eof(CTLCONF)) {
-        $line = readline(*CTLCONF);
-        chomp($line);
-        if ($line =~ /^[\s\t]*\#target $targetname[\s\t]*\{/) {
-        $bracketcount++;
-        $targetfound = 1;
-        $line = substr($line, 1)
-        } else {
-        if ($line =~ /^[\s\t]*target $targetname[\s\t]*\{/) {
-            $errormessage = "target is enabled already.";
-        }
-        if ($bracketcount > 0) {
-            if ($line =~ /.*\}/) {
-            $bracketcount--;
-            }
-            if ($line =~ /.*\{/) {
-            $bracketcount++;
-            }
-            $line = substr($line, 1)
-        }
-        }
-        print CTLCONFNEW $line, "\n";
-    }
-    close(CTLCONF);
-    close(CTLCONFNEW);
-    $spell = $sudopath." /bin/chmod 600 ".$ctlconfpath.".new";
-    system($spell);
-    $spell = $sudopath." /bin/mv ".$ctlconfpath.".new /etc/ctl.conf";
-    system($spell);
-    if ($debug > 0) {
-        $psgiresult .= "<debug>returning 0</debug>\n";
-    }
-    $spell = $sudopath." /usr/sbin/chown zfsreplica:www ".$ctlconfpath;
-    system($spell);
-    if ($debug == 0) {
-        unlink($ctlconfpath);
-        #unlink($logpath);
-    }
-    if ($targetfound > 0) {
-        return 0;
+	$ug = Data::UUID -> new;
+	$uuid = $ug -> create_str();
+	$ctlconfpath = "/tmp/ctl.conf.".$uuid;
+	$spell = $sudopath." /bin/cp /etc/ctl.conf ".$ctlconfpath;
+	system($spell);
+	$spell = $sudopath." /bin/chmod 644 ".$ctlconfpath;
+	system($spell);
+	open(CTLCONF, "<", $ctlconfpath) or return 1;
+	open(CTLCONFNEW, ">", $ctlconfpath.".new") or return 1;
+	while (!eof(CTLCONF)) {
+	    $line = readline(*CTLCONF);
+	    chomp($line);
+	    if ($line =~ /^[\s\t]*\#target $targetname[\s\t]*\{/) {
+		$bracketcount++;
+		$targetfound = 1;
+		$line = substr($line, 1)
+	    } else {
+		if ($line =~ /^[\s\t]*target $targetname[\s\t]*\{/) {
+		    $errormessage = "target is enabled already.";
+		}
+		if ($bracketcount > 0) {
+		    if ($line =~ /.*\}/) {
+			$bracketcount--;
+		    }
+		    if ($line =~ /.*\{/) {
+        		$bracketcount++;
+        	    }
+        	    $line = substr($line, 1)
+		}
+	    }
+	    print CTLCONFNEW $line, "\n";
+	}
+	close(CTLCONF);
+	close(CTLCONFNEW);
+	$spell = $sudopath." /bin/chmod 600 ".$ctlconfpath.".new";
+	system($spell);
+	$spell = $sudopath." /bin/mv ".$ctlconfpath.".new /etc/ctl.conf";
+	system($spell);
+	if ($debug > 0) {
+	    $psgiresult .= "<debug>returning 0</debug>\n";
+	}
+	$spell = $sudopath." /usr/sbin/chown zfsreplica:www ".$ctlconfpath;
+	system($spell);
+	if ($debug == 0) {
+	    unlink($ctlconfpath);
+	    #unlink($logpath);
+	}
+	if ($targetfound > 0) {
+	    return 0;
+	} else {
+	    return 1;
+	}
     } else {
-        return 1;
-    }
-    } else {
-    return 1;
+	return 1;
     }
 }
 
@@ -581,74 +581,74 @@ sub disabletarget() {
     my $openstatus = 0;
 
     if (defined($targetname)) {
-    $ug = Data::UUID -> new;
-    $uuid = $ug -> create_str();
-    $ctlconfpath = "/tmp/ctl.conf.".$uuid;
-    $spell = $sudopath." /bin/cp /etc/ctl.conf ".$ctlconfpath;
-    system($spell);
-    $spell = $sudopath." /bin/chmod 644 ".$ctlconfpath;
-    system($spell);
-    $openstatus = open(CTLCONF, "<", $ctlconfpath);
-    if ($openstatus == 0) {
-        $errormessage = "cannot open ".$ctlconfpath." for reading.";
-        return 1;
-    }
-    open(CTLCONFNEW, ">", $ctlconfpath.".new") or return 1;
-    while (!eof(CTLCONF)) {
-        $line = readline(*CTLCONF);
-        chomp($line);
-        if ($line =~ /^[\s\t]*target $targetname[\s\t]*\{/) {
-        $bracketcount++;
-        $targetfound = 1;
-        #$psgiresult .= "<debug>BRACKETCOUNT UP: ".$bracketcount."</debug>\n";
-        #$psgiresult .= "<debug># ".$line."</debug>\n";
-        print CTLCONFNEW "#", $line, "\n";
-        } else {
-        if ($line =~ /^\#[\s\t]*target $targetname[\s\t]*\{/) {
-            $errormessage = "target is disabled already.";
-            $targetfound = 1;
-        }
-        if ($bracketcount > 0) {
-            if ($line =~ /.*\}/) {
-            $bracketcount--;
-            #$psgiresult .= "<debug>BRACKETCOUNT DOWN: ".$bracketcount."</debug>\n";
-            }
-            if ($line =~ /.*\{/) {
-            $bracketcount++;
-            #$psgiresult .= "<debug>BRACKETCOUNT UP: ".$bracketcount."</debug>\n";
-            }
-            #$psgiresult .= "<debug># ".$line."</debug>\n";
-            print CTLCONFNEW "#", $line, "\n";
-        } else {
-            #$psgiresult .= "<debug>NOMOD ".$line."</debug>\n";
-            print CTLCONFNEW $line, "\n";
-        }
-        }
-    }
-    close(CTLCONF);
-    close(CTLCONFNEW);
-    $spell = $sudopath." /bin/chmod 600 ".$ctlconfpath.".new";
-    system($spell);
-    $spell = $sudopath." /bin/mv ".$ctlconfpath.".new /etc/ctl.conf";
-    system($spell);
-    $spell = $sudopath." /usr/sbin/chown zfsreplica:www ".$ctlconfpath;
-    system($spell);
-    if ($debug == 0) {
-        unlink($ctlconfpath);
-        #unlink($logpath);
-        }
-    if ($targetfound > 0) {
-        if ($debug > 0) {
-        $psgiresult .= "<debug>returning 0</debug>\n";
-        }
-        return 0;
+	$ug = Data::UUID -> new;
+	$uuid = $ug -> create_str();
+	$ctlconfpath = "/tmp/ctl.conf.".$uuid;
+	$spell = $sudopath." /bin/cp /etc/ctl.conf ".$ctlconfpath;
+	system($spell);
+	$spell = $sudopath." /bin/chmod 644 ".$ctlconfpath;
+	system($spell);
+	$openstatus = open(CTLCONF, "<", $ctlconfpath);
+	if ($openstatus == 0) {
+	    $errormessage = "cannot open ".$ctlconfpath." for reading.";
+	return 1;
+	}
+	open(CTLCONFNEW, ">", $ctlconfpath.".new") or return 1;
+	while (!eof(CTLCONF)) {
+	$line = readline(*CTLCONF);
+	    chomp($line);
+	    if ($line =~ /^[\s\t]*target $targetname[\s\t]*\{/) {
+		$bracketcount++;
+		$targetfound = 1;
+		#$psgiresult .= "<debug>BRACKETCOUNT UP: ".$bracketcount."</debug>\n";
+		#$psgiresult .= "<debug># ".$line."</debug>\n";
+		print CTLCONFNEW "#", $line, "\n";
+	    } else {
+		if ($line =~ /^\#[\s\t]*target $targetname[\s\t]*\{/) {
+        	    $errormessage = "target is disabled already.";
+        	    $targetfound = 1;
+		}
+		if ($bracketcount > 0) {
+        	    if ($line =~ /.*\}/) {
+        		$bracketcount--;
+        		#$psgiresult .= "<debug>BRACKETCOUNT DOWN: ".$bracketcount."</debug>\n";
+        	    }
+        	    if ($line =~ /.*\{/) {
+        		$bracketcount++;
+        		#$psgiresult .= "<debug>BRACKETCOUNT UP: ".$bracketcount."</debug>\n";
+        	    }
+        	    #$psgiresult .= "<debug># ".$line."</debug>\n";
+        	    print CTLCONFNEW "#", $line, "\n";
+		} else {
+        	    #$psgiresult .= "<debug>NOMOD ".$line."</debug>\n";
+        	    print CTLCONFNEW $line, "\n";
+		}
+	    }
+	}
+	close(CTLCONF);
+	close(CTLCONFNEW);
+	$spell = $sudopath." /bin/chmod 600 ".$ctlconfpath.".new";
+	system($spell);
+	$spell = $sudopath." /bin/mv ".$ctlconfpath.".new /etc/ctl.conf";
+	system($spell);
+	$spell = $sudopath." /usr/sbin/chown zfsreplica:www ".$ctlconfpath;
+	system($spell);
+	if ($debug == 0) {
+	    unlink($ctlconfpath);
+	    #unlink($logpath);
+	}
+	if ($targetfound > 0) {
+	    if ($debug > 0) {
+		$psgiresult .= "<debug>returning 0</debug>\n";
+	    }
+	    return 0;
+	} else {
+	    $errormessage = "target not found.";
+	    return 1;
+	}
     } else {
-        $errormessage = "target not found.";
-        return 1;
-    }
-    } else {
-    $errormessage = "targetname not defined.";
-    return 1;
+	$errormessage = "targetname not defined.";
+	return 1;
     }
 }
 
@@ -663,75 +663,75 @@ sub mounttarget() {
     my $targetmodified = 0;
 
     if (defined($targetname) && defined($device)) {
-    $ug = Data::UUID -> new;
-    $uuid = $ug -> create_str();
-    $ctlconfpath = "/tmp/ctl.conf.".$uuid;
-    $spell = $sudopath." /bin/cp /etc/ctl.conf ".$ctlconfpath;
-    system($spell);
-    $spell = $sudopath." /bin/chmod 644 ".$ctlconfpath;
-    system($spell);
-    open(CTLCONF, "<", $ctlconfpath) or return 1;
-    open(CTLCONFNEW, ">", $ctlconfpath.".new") or return 1;
-    while (!eof(CTLCONF)) {
-        $line = readline(*CTLCONF);
-        chomp($line);
-        if ($line =~ /^[\s\t]*[\#]*target $targetname[\s\t]*\{/) {
-        $bracketcount++;
-        $targetfound = 1;
-        } else {
-        if ($targetfound == 1 && $bracketcount == 2 && $lunfound ==1 && $line =~ /[\s\t]*path /) {
-            @tmp = split(/path/, $line);
-            $line = $tmp[0]."path ".$device;
-            $targetmodified = 1;
-        } else {
-            if ($bracketcount > 0) {
-            if ($line =~ /.*\}/) {
-                $bracketcount--;
-                if ($lunfound == 1) {
-                $lunfound = 0;
-                }
-                # bracketcount was > 0 when entered, but then descreased to 0 -> means we're off the target
-                if ($bracketcount == 0) {
-                $targetfound = 0;
-                }
-            }
-            if ($line =~ /.*\{/) {
-                $bracketcount++;
-                if ($line =~ /lun $lun/) {
-                $lunfound = 1;
-                }
-            }
-            } else {
-            }
-        }
-        }
-        print CTLCONFNEW $line, "\n";
-    }
-    close(CTLCONF);
-    close(CTLCONFNEW);
-    $spell = $sudopath." /bin/chmod 600 ".$ctlconfpath.".new";
-    system($spell);
-    $spell = $sudopath." /bin/mv ".$ctlconfpath.".new /etc/ctl.conf";
-    system($spell);
-    $spell = $sudopath." /usr/sbin/chown zfsreplica:www ".$ctlconfpath;
-    system($spell);
-    if ($debug == 0) {
-        unlink($ctlconfpath);
-        #unlink($logpath);
-    }
-    if ($targetmodified > 0) {
-        if ($debug > 0) {
-        $psgiresult .= "<debug>returning 0</debug>\n";
-        }
-        return 0;
+	$ug = Data::UUID -> new;
+	$uuid = $ug -> create_str();
+	$ctlconfpath = "/tmp/ctl.conf.".$uuid;
+	$spell = $sudopath." /bin/cp /etc/ctl.conf ".$ctlconfpath;
+	system($spell);
+	$spell = $sudopath." /bin/chmod 644 ".$ctlconfpath;
+	system($spell);
+	open(CTLCONF, "<", $ctlconfpath) or return 1;
+	open(CTLCONFNEW, ">", $ctlconfpath.".new") or return 1;
+	while (!eof(CTLCONF)) {
+	    $line = readline(*CTLCONF);
+	    chomp($line);
+	    if ($line =~ /^[\s\t]*[\#]*target $targetname[\s\t]*\{/) {
+		$bracketcount++;
+		$targetfound = 1;
+	    } else {
+		if ($targetfound == 1 && $bracketcount == 2 && $lunfound ==1 && $line =~ /[\s\t]*path /) {
+        	    @tmp = split(/path/, $line);
+        	    $line = $tmp[0]."path ".$device;
+        	    $targetmodified = 1;
+		} else {
+        	    if ($bracketcount > 0) {
+        		if ($line =~ /.*\}/) {
+            		    $bracketcount--;
+            		    if ($lunfound == 1) {
+            			$lunfound = 0;
+            		    }
+            		    # bracketcount was > 0 when entered, but then descreased to 0 -> means we're off the target
+            		    if ($bracketcount == 0) {
+            			$targetfound = 0;
+            		    }
+        		}
+        		if ($line =~ /.*\{/) {
+            		    $bracketcount++;
+            		    if ($line =~ /lun $lun/) {
+            			$lunfound = 1;
+            		    }
+        		}
+        		} else {
+        	    }
+		}
+	    }
+	    print CTLCONFNEW $line, "\n";
+	}
+	close(CTLCONF);
+	close(CTLCONFNEW);
+	$spell = $sudopath." /bin/chmod 600 ".$ctlconfpath.".new";
+	system($spell);
+	$spell = $sudopath." /bin/mv ".$ctlconfpath.".new /etc/ctl.conf";
+	system($spell);
+	$spell = $sudopath." /usr/sbin/chown zfsreplica:www ".$ctlconfpath;
+	system($spell);
+	if ($debug == 0) {
+	    unlink($ctlconfpath);
+	    #unlink($logpath);
+	}
+	if ($targetmodified > 0) {
+	    if ($debug > 0) {
+		$psgiresult .= "<debug>returning 0</debug>\n";
+	    }
+	    return 0;
+	} else {
+	    if ($debug < 0) {
+		$psgiresult .= "<debug>returning 1</debug>\n";
+	    }
+	    return 1;
+	}
     } else {
-        if ($debug < 0) {
-        $psgiresult .= "<debug>returning 1</debug>\n";
-        }
-        return 1;
-    }
-    } else {
-    return 1;
+	return 1;
     }
 }
 
@@ -740,14 +740,14 @@ sub handleresult() {
         $psgiresult .= "<status>success</status>\n";
     } else {
         $psgiresult .= "<status>error</status>\n";
-    $psgiresult .= "<errormessage>".$errormessage."</errormessage>\n";
-    $psgiresult .= "<log>\n";
-    $i = 0;
-    while ($i < @logcontents) {
-        $psgiresult .= "<entry>".$logcontents[$i]."</entry>\n";
-        $i++
-    }
-    $psgiresult .= "</log>\n";
+	$psgiresult .= "<errormessage>".$errormessage."</errormessage>\n";
+	$psgiresult .= "<log>\n";
+	$i = 0;
+	while ($i < @logcontents) {
+	    $psgiresult .= "<entry>".$logcontents[$i]."</entry>\n";
+	$i++
+	}
+	$psgiresult .= "</log>\n";
     }
 }
 
@@ -756,23 +756,23 @@ sub handlestatus {
         $psgiresult .= "<status>success</status>\n";
     } else {
         $psgiresult .= "<status>error</status>\n";
-    $psgiresult .= "<errormessage>".$errormessage."</errormessage>\n";
+	$psgiresult .= "<errormessage>".$errormessage."</errormessage>\n";
     }
     $psgiresult .= "<log>\n";
     $i = 0;
     while ($i < @logcontents) {
-    if ($logcontents[$i] =~ /^NAME/) {
-    } else {
-        #$psgiresult .= "<raw>".$logcontents[$i]."</raw>";
-        @tmp = split(/[\s\t]+/, $logcontents[$i]);
-        $psgiresult .= "<zfsentity>\n";
-        $psgiresult .= "<name>".$tmp[0]."</name>\n";
-        $psgiresult .= "<used>".$tmp[1]."</used>\n";
-        $psgiresult .= "<avail>".$tmp[2]."</avail>\n";
-        $psgiresult .= "<refer>".$tmp[3]."</refer>\n";
-        $psgiresult .= "<mountpoint>".$tmp[4]."</mountpoint>\n";
-        $psgiresult .= "</zfsentity>\n";
-    }
+	if ($logcontents[$i] =~ /^NAME/) {
+	} else {
+	    #$psgiresult .= "<raw>".$logcontents[$i]."</raw>";
+	    @tmp = split(/[\s\t]+/, $logcontents[$i]);
+	    $psgiresult .= "<zfsentity>\n";
+	    $psgiresult .= "<name>".$tmp[0]."</name>\n";
+	    $psgiresult .= "<used>".$tmp[1]."</used>\n";
+	    $psgiresult .= "<avail>".$tmp[2]."</avail>\n";
+	    $psgiresult .= "<refer>".$tmp[3]."</refer>\n";
+	    $psgiresult .= "<mountpoint>".$tmp[4]."</mountpoint>\n";
+	    $psgiresult .= "</zfsentity>\n";
+	}
         $i++
     }
     $psgiresult .= "</log>\n";
@@ -794,125 +794,125 @@ sub getsendingdetails() {
     my $spellfmt;
 
     if (defined($remotedcip) && defined($startsnapshot) && defined($endsnapshot)) {
-    $ug = Data::UUID -> new;
-    $uuid = $ug -> create_str();
-    $logpath = "/tmp/zfs-send-details-".$uuid.".log";
+	$ug = Data::UUID -> new;
+	$uuid = $ug -> create_str();
+	$logpath = "/tmp/zfs-send-details-".$uuid.".log";
 
-    $spell = "ps awwwwx | grep zfs\\ send | grep @".$startsnapshot." | grep @".$endsnapshot." | egrep -v 'sudo|grep' | wc -l | tr -d ' ' >".$logpath;
-    if ($debug > 0) {
-        $spellfmt = $spell;
-        $spellfmt =~ s/>/&gt;/g;
-        $psgiresult .= "<debug><spell>".$spell."</spell></debug>\n"
-    }
-    system($spell);
-    open(LOG, "<".$logpath);
-    while (!eof(LOG)) {
-        $line = readline(LOG);
-        chomp($line);
-        $linecount++;
-    }
-    close(LOG);
-    if ($debug == 0) {
-        unlink($logpath);
-    }
+	$spell = "ps awwwwx | grep zfs\\ send | grep @".$startsnapshot." | grep @".$endsnapshot." | egrep -v 'sudo|grep' | wc -l | tr -d ' ' >".$logpath;
+	if ($debug > 0) {
+	    $spellfmt = $spell;
+	    $spellfmt =~ s/>/&gt;/g;
+	    $psgiresult .= "<debug><spell>".$spell."</spell></debug>\n"
+	}
+	system($spell);
+	open(LOG, "<".$logpath);
+	while (!eof(LOG)) {
+	    $line = readline(LOG);
+	    chomp($line);
+	    $linecount++;
+	}
+	close(LOG);
+	if ($debug == 0) {
+	    unlink($logpath);
+	}
 
-    if ($linecount > 1) {
-        $errormessage = "log lines number is greater than one.";
-        return -1;
+	if ($linecount > 1) {
+	    $errormessage = "log lines number is greater than one.";
+	    return -1;
+	} else {
+	    $psgiresult .= "<active>".$line."</active>\n";
+	    $uuid = $ug -> create_str();
+	    $logpath = "/tmp/zfs-send-details-ps-".$uuid.".log";
+	    $lognamestart = "zfs-send-".$remotedcip;
+	    $spell = "ls -l ".$loglocation." | grep ".$lognamestart." | grep @".$startsnapshot." | grep @".$endsnapshot." | awk '{print $9}' >".$logpath;
+	    if ($debug > 1) {
+		$psgiresult .= "<debug><sendlogsearchspell>".$spell."</sendlogsearchspell></debug>\n"
+	    }
+	    system($spell);
+
+	    $rs = open(SPELLLOG, "<".$logpath);
+	    if ($rs > 0) {
+		$linecount = 0;
+		while (!eof(SPELLLOG)) {
+        	    $line = readline(SPELLLOG);
+        	    chomp($line);
+        	    if ($debug > 1) {
+        		$psgiresult .= "<debug><rawline>".$line."</rawline></debug>\n"
+        	    }
+        	    chomp($line);
+        	    @tmp = split(/[\s\t]+/, $line);
+        	    $sendlogpath = $tmp[8];
+        	    $linecount++;
+		}
+		close(SPELLLOG);
+		if ($debug == 0) {
+        	    unlink($logpath);
+		}
+	    } else {
+		$errormessage = "cannot open file for reading: ".$logpath;
+		return -1;
+	    }
+
+	    if ($debug > 0) {
+		$psgiresult .= "<debug><sendlogpath>".$loglocation."/".$sendlogpath."</sendlogpath></debug>\n"
+	    }
+
+	    if ($sendlogpath ne "") {
+		$rs = open(SENDLOG, "<".$loglocation."/".$sendlogpath);
+		if ($rs > 0) {
+        	    while (!eof(SENDLOG)) {
+        		$line = readline(SENDLOG);
+        		chomp($line);
+        		if ($debug > 1) {
+        		    $psgiresult .= "<debug><rawline>".$line."</rawline></debug>"
+        		}
+        		if ($line =~ /total estimated size is/) {
+        		    @tmp = split(/[\s\t]+/, $line);
+        		    $estimated = $tmp[4];
+			} else {
+        		    if ($line =~ /\d+:\d+:\d+/) {
+        			@tmp = split(/[\s\t]+/, $line);
+        			$sent = $tmp[1];
+        		    }
+        		}
+        		#
+        		# ERROR HANDLING
+        		#
+
+        		# cannot receive incremental stream: destination data/testrep has been modified
+        		# since most recent snapshot
+        		if ($line =~ /cannot receive incremental stream: destination .+ has been modified/) {
+        		    return "<senderror>cannot receive incremental stream: destination has been modified</senderror>";
+        		}
+        		# warning: cannot send 'data/testrep@ver1008_18': signal received
+        		if ($line =~ /cannot send .+: signal received/) {
+        		    return "<senderror>cannot send: signal received</senderror>";
+        		}
+        	    }
+        	    close(SENDLOG);
+
+        	    # do the final data
+        	    return "<details>\n<totalestimated>".$estimated."</totalestimated>\n<alreadysent>".$sent."</alreadysent>\n</details>\n";
+		} else {
+        	    $errormessage = "cannot open zfs send logfile for reading: ".$sendlogpath;
+        	    return -1;
+		}
+	    } else {
+		$errormessage = "cannot find send log.";
+		return -1;
+	    }
+	}
     } else {
-        $psgiresult .= "<active>".$line."</active>\n";
-        $uuid = $ug -> create_str();
-        $logpath = "/tmp/zfs-send-details-ps-".$uuid.".log";
-        $lognamestart = "zfs-send-".$remotedcip;
-        $spell = "ls -l ".$loglocation." | grep ".$lognamestart." | grep @".$startsnapshot." | grep @".$endsnapshot." | awk '{print $9}' >".$logpath;
-        if ($debug > 1) {
-        $psgiresult .= "<debug><sendlogsearchspell>".$spell."</sendlogsearchspell></debug>\n"
-        }
-        system($spell);
-
-        $rs = open(SPELLLOG, "<".$logpath);
-        if ($rs > 0) {
-        $linecount = 0;
-        while (!eof(SPELLLOG)) {
-            $line = readline(SPELLLOG);
-            chomp($line);
-            if ($debug > 1) {
-            $psgiresult .= "<debug><rawline>".$line."</rawline></debug>\n"
-            }
-            chomp($line);
-            @tmp = split(/[\s\t]+/, $line);
-            $sendlogpath = $tmp[8];
-            $linecount++;
-        }
-        close(SPELLLOG);
-        if ($debug == 0) {
-            unlink($logpath);
-        }
-        } else {
-        $errormessage = "cannot open file for reading: ".$logpath;
-        return -1;
-        }
-
-        if ($debug > 0) {
-        $psgiresult .= "<debug><sendlogpath>".$loglocation."/".$sendlogpath."</sendlogpath></debug>\n"
-        }
-
-        if ($sendlogpath ne "") {
-        $rs = open(SENDLOG, "<".$loglocation."/".$sendlogpath);
-        if ($rs > 0) {
-            while (!eof(SENDLOG)) {
-            $line = readline(SENDLOG);
-            chomp($line);
-            if ($debug > 1) {
-                $psgiresult .= "<debug><rawline>".$line."</rawline></debug>"
-            }
-            if ($line =~ /total estimated size is/) {
-                @tmp = split(/[\s\t]+/, $line);
-                $estimated = $tmp[4];
-            } else {
-                if ($line =~ /\d+:\d+:\d+/) {
-                @tmp = split(/[\s\t]+/, $line);
-                $sent = $tmp[1];
-                }
-            }
-            #
-            # ERROR HANDLING
-            #
-
-            # cannot receive incremental stream: destination data/testrep has been modified
-            # since most recent snapshot
-            if ($line =~ /cannot receive incremental stream: destination .+ has been modified/) {
-                return "<senderror>cannot receive incremental stream: destination has been modified</senderror>";
-            }
-            # warning: cannot send 'data/testrep@ver1008_18': signal received
-            if ($line =~ /cannot send .+: signal received/) {
-                return "<senderror>cannot send: signal received</senderror>";
-            }
-            }
-            close(SENDLOG);
-
-            # do the final data
-            return "<details>\n<totalestimated>".$estimated."</totalestimated>\n<alreadysent>".$sent."</alreadysent>\n</details>\n";
-        } else {
-            $errormessage = "cannot open zfs send logfile for reading: ".$sendlogpath;
-            return -1;
-        }
-        } else {
-        $errormessage = "cannot find send log.";
-        return -1;
-        }
-    }
-    } else {
-    if (defined($remotedcip)) {
-        if (defined($endsnapshot)) {
-        $errormessage = "start snapshot name not supplied.";
-        } else {
-        $errormessage = "end snapshot name not supplied.";
-        }
-    } else {
-        $errormessage = "remote DC ip not supplied.";
-    }
-    return -1;
+	if (defined($remotedcip)) {
+	    if (defined($endsnapshot)) {
+		$errormessage = "start snapshot name not supplied.";
+	    } else {
+		$errormessage = "end snapshot name not supplied.";
+	    }
+	} else {
+	    $errormessage = "remote DC ip not supplied.";
+	}
+	return -1;
     }
 }
 
@@ -923,31 +923,31 @@ sub getsendingstatus() {
     my $linecount = 0;
 
     if (defined($remotedcip)) {
-    $ug = Data::UUID -> new;
-    $uuid = $ug -> create_str();
-    $logpath = "/tmp/zfs-send-list-local.log.".$uuid;
-    
-    $spell = "ps awwwx | grep zfs\\ receive | grep ".$remotedcip." | grep -v grep | wc -l | tr -d ' ' >".$logpath;
-    system($spell);
-    open(LOG, "<".$logpath);
-    while (!eof(LOG)) {
-        $line = readline(LOG);
-        chomp($line);
-        $linecount++;
-    }
-    close(LOG);
-    if ($debug == 0) {
-        unlink($logpath);
-    }
-    if ($linecount > 1) {
-        $errormessage = "log lines number is greater than one.";
-        return -1;
+	$ug = Data::UUID -> new;
+	$uuid = $ug -> create_str();
+	$logpath = "/tmp/zfs-send-list-local.log.".$uuid;
+
+	$spell = "ps awwwx | grep zfs\\ receive | grep ".$remotedcip." | grep -v grep | wc -l | tr -d ' ' >".$logpath;
+	system($spell);
+	open(LOG, "<".$logpath);
+	while (!eof(LOG)) {
+	    $line = readline(LOG);
+	    chomp($line);
+	    $linecount++;
+	}
+	close(LOG);
+	if ($debug == 0) {
+	    unlink($logpath);
+	}
+	if ($linecount > 1) {
+	    $errormessage = "log lines number is greater than one.";
+	    return -1;
+	} else {
+	    return $line;
+	}
     } else {
-        return $line;
-    }
-    } else {
-    $errormessage = "remote DC ip not supplied.";
-    return -1;
+	$errormessage = "remote DC ip not supplied.";
+	return -1;
     }
 }
 
@@ -963,8 +963,7 @@ sub getreceivingstatus() {
 
     $spell = "ps ax | grep zfs\\ receive | egrep -v 'grep|ssh' | wc -l | tr -d ' ' >".$logpath;
     if ($debug > 0) {
-    $psgiresult .= "<debug>spell: ".$spell."</debug>"
-    
+	$psgiresult .= "<debug>spell: ".$spell."</debug>"
     }
     system($spell);
     open(LOG, "<".$logpath);
@@ -975,7 +974,7 @@ sub getreceivingstatus() {
     }
     close(LOG);
     if ($debug == 0) {
-    unlink($logpath);
+	unlink($logpath);
     }
     if ($linecount > 1) {
         $errormessage = "log lines number is greater than one.";
@@ -1195,69 +1194,69 @@ sub senddelta() {
 	return 0;
 
 
-    # if first snapshot doesn't exist on the remote - then bail out
-    if ($firstsnapexists == 0) {
-        $errormessage = "start snapshot doesn't exist on the remote side.";
-        return 1;
-    }
+	# if first snapshot doesn't exist on the remote - then bail out
+	if ($firstsnapexists == 0) {
+	    $errormessage = "start snapshot doesn't exist on the remote side.";
+	return 1;
+	}
 
-    if ($secondsnapexists == 1) {
-        $errormessage = "end snapshot already exists on the remote side.";
-        return 1;
-    }
+	if ($secondsnapexists == 1) {
+	    $errormessage = "end snapshot already exists on the remote side.";
+	    return 1;
+	}
 
-    # now check if we're not sending it now
-    if (getsendingstatus() > 0) {
-        $errormessage = "seems like we're already sending.";
-        return 1;
-    }
+	# now check if we're not sending it now
+	if (getsendingstatus() > 0) {
+	    $errormessage = "seems like we're already sending.";
+	    return 1;
+	}
 
-    # now send it
-    $startsnapshotescaped = $startsnapshot;
-    $startsnapshotescaped =~ s/\//--/g;
-    $endsnapshotescaped = $endsnapshot;
-    $endsnapshotescaped =~ s/\//--/g;
-    $logpath = $loglocation."/zfs-send-".$remotedcip."-".$startsnapshotescaped."-".$endsnapshotescaped.".log";
-    if ($debug > 0) {
-        $psgiresult .= "<debug>\n";
-        $psgiresult .= "<firstsnapexistsonremote>".$firstsnapexists."</firstsnapexistsonremote>\n";
-        $psgiresult .= "<secondsnapexistsonremote>".$secondsnapexists."</secondsnapexistsonremote>\n";
+	# now send it
+	$startsnapshotescaped = $startsnapshot;
+        $startsnapshotescaped =~ s/\//--/g;
+        $endsnapshotescaped = $endsnapshot;
+        $endsnapshotescaped =~ s/\//--/g;
+        $logpath = $loglocation."/zfs-send-".$remotedcip."-".$startsnapshotescaped."-".$endsnapshotescaped.".log";
+	if ($debug > 0) {
+	    $psgiresult .= "<debug>\n";
+	    $psgiresult .= "<firstsnapexistsonremote>".$firstsnapexists."</firstsnapexistsonremote>\n";
+	    $psgiresult .= "<secondsnapexistsonremote>".$secondsnapexists."</secondsnapexistsonremote>\n";
 
-        $psgiresult .= "<debug>okay to send the delta.</debug>\n";
-        $psgiresult .= "<logpath>".$logpath."</logpath>\n";
-        $psgiresult .= "</debug>\n";
-    }
-    $startedat = time();
+	    $psgiresult .= "<debug>okay to send the delta.</debug>\n";
+	    $psgiresult .= "<logpath>".$logpath."</logpath>\n";
+	    $psgiresult .= "</debug>\n";
+	}
+	$startedat = time();
 
-    $spell = "/usr/local/bin/sudo zfs send -vi ".$startsnapshot." ".$endsnapshot." 2>>".$logpath." | ssh ".$remotedcip." sudo zfs receive -d ".$remotedataset." 2>>".$logpath." &";
+	$spell = "/usr/local/bin/sudo zfs send -vi ".$startsnapshot." ".$endsnapshot." 2>>".$logpath." | ssh ".$remotedcip." sudo zfs receive -d ".$remotedataset." 2>>".$logpath." &";
 
-    uwsgi::spool({spell => $spell});
+	uwsgi::spool({spell => $spell});
 
-    if ($debug > 0) {
-        $formattedspell = $spell;
-        $formattedspell =~ s/&/&amp;/g;
-        $psgiresult .= "<debug>replication spell: ".$formattedspell."</debug>\n";
-    }
-    if ($debug > 0) {
-        $psgiresult .= "<debug>zfs send invocation took ".(time() - $startedat)." seconds</debug>\n";
-    }
-    return 0;
+	if ($debug > 0) {
+	    $formattedspell = $spell;
+	    $formattedspell =~ s/&/&amp;/g;
+	    $psgiresult .= "<debug>replication spell: ".$formattedspell."</debug>\n";
+	}
+	if ($debug > 0) {
+	    $psgiresult .= "<debug>zfs send invocation took ".(time() - $startedat)." seconds</debug>\n";
+	}
+	return 0;
 
     } else {
-    if (!defined($remotedcip)) {
-        $errormessage = "remote dc ip not supplied.";
-    } else {
-        if (!defined($remotedataset)) {
-        $errormessage = "remote dataset not supplied.";
-        } else {
-        if (!defined($startsnapshot)) {
-            $errormessage = "start snapshot not supplied.";
-        } else {
-            $errormessage = "end snapshot not supplied.";
-        }
-        }
-    }
-    return 1;
+	if (!defined($remotedcip)) {
+	    $errormessage = "remote dc ip not supplied.";
+	} else {
+	    if (!defined($remotedataset)) {
+		$errormessage = "remote dataset not supplied.";
+	    } else {
+		if (!defined($startsnapshot)) {
+        	    $errormessage = "start snapshot not supplied.";
+		} else {
+        	    $errormessage = "end snapshot not supplied.";
+		}
+	    }
+	}
+	return 1;
     }
 }
 
@@ -1269,7 +1268,7 @@ sub targetcreate() {
     my $successflag = 0;
     my $messageerror;
     my $messageinfo;
-    
+
     if (defined($targetname) && $targetname ne "null" &&
         defined($deviceid) && $deviceid ne "null" &&
         defined($scsiname) && $scsiname ne "null" &&
@@ -1277,7 +1276,7 @@ sub targetcreate() {
         defined($vendor) && $vendor ne "null") {
         $ug = Data::UUID -> new;
         $uuid = $ug -> create_str();
-        
+
         $ctladmlogpath = "/tmp/ctladm.log.".$uuid;
         $spell = $sudopath." /usr/sbin/ctladm create -b block -o file=".$targetname." -o vendor=".$vendor." -o scsiname=".$scsiname." -o ctld_name=".$scsiname." -d ".$deviceid." -l ".$lunid." > ".$ctladmlogpath." 2>&1";
         system($spell);
@@ -1476,44 +1475,38 @@ $app = sub {
 	        $snapshot = "null";
 	    }
 	}
-    if ($request[$i] =~ "deviceid") {
-        @tmp = split(/=/, $request[$i]);
-        if (defined($tmp[1])) {
-            $deviceid = $tmp[1];
-        } else {
-            $deviceid = "null";
-        }
-    }
-    if ($request[$i] =~ "scsiname") 
-    {
-        @tmp = split(/=/, $request[$i]);
-        if (defined($tmp[1])) 
-        {
-            $scsiname = $tmp[1];
-        } else {
-            $scsiname = "null";
-        }
-    }
-    if ($request[$i] =~ "lunid") 
-    {
-        @tmp = split(/=/, $request[$i]);
-        if (defined($tmp[1])) 
-        {
-            $lunid = $tmp[1];
-        } else {
-            $lunid = "null";
-        }
-    }
-    if ($request[$i] =~ "vendor") 
-    {
-        @tmp = split(/=/, $request[$i]);
-        if (defined($tmp[1])) 
-        {
-            $vendor = $tmp[1];
-        } else {
-            $vendor = "null";
-        }
-    }
+	if ($request[$i] =~ "deviceid") {
+	    @tmp = split(/=/, $request[$i]);
+	    if (defined($tmp[1])) {
+        	$deviceid = $tmp[1];
+	    } else {
+        	$deviceid = "null";
+	    }
+	}
+	if ($request[$i] =~ "scsiname") {
+	    @tmp = split(/=/, $request[$i]);
+	    if (defined($tmp[1])) {
+        	$scsiname = $tmp[1];
+	    } else {
+        	$scsiname = "null";
+	    }
+	}
+	if ($request[$i] =~ "lunid") {
+	    @tmp = split(/=/, $request[$i]);
+	    if (defined($tmp[1])) {
+        	$lunid = $tmp[1];
+	    } else {
+        	$lunid = "null";
+	    }
+	}
+	if ($request[$i] =~ "vendor") {
+	    @tmp = split(/=/, $request[$i]);
+	    if (defined($tmp[1])) {
+        	$vendor = $tmp[1];
+	    } else {
+        	$vendor = "null";
+	    }
+	}
 	if ($request[$i] =~ "debug") {
 	    @tmp = split(/=/, $request[$i]);
 	    if (defined($tmp[1])) {
