@@ -6,7 +6,7 @@ use v5.14;
 use Data::UUID;
 
 #-----------------------------
-my $version = "2.0.22";
+my $version = "2.0.23";
 my $i;
 my $action = "null";
 my $snapsource = "null";
@@ -335,13 +335,14 @@ sub gettargetconfig() {
     my %target_params = ("targetname" => "$target");
     my %lun_params;
 
-    my $errmsg = 'SuDoCaTeRrOr';
-    my $config = `sudo cat "$file" 2>&1 || echo "$errmsg"`;
-    if($config =~ $errmsg)
-    {
-      $errormessage = $config;
-      return;
-    }
+    open F, "<", $file or (
+        $errormessage = "could not open $file : $!"
+        and return);
+    my $old_delim = $/;
+    $/ = undef;
+    my $config = <F>;
+    close F;
+    $/ = $old_delim;
 
     # remove commented lines
     $config =~ s/#.*?\n//sg;
@@ -744,7 +745,7 @@ sub handleresult() {
 	$i = 0;
 	while ($i < @logcontents) {
 	    $psgiresult .= "<entry>".$logcontents[$i]."</entry>\n";
-	$i++
+	    $i++
 	}
 	$psgiresult .= "</log>\n";
     }
