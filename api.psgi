@@ -6,7 +6,7 @@ use v5.14;
 use Data::UUID;
 
 #-----------------------------
-my $version = "2.0.23";
+my $version = "2.0.24";
 my $i;
 my $action = "null";
 my $snapsource = "null";
@@ -194,11 +194,16 @@ sub getclone() {
 }
 
 sub getstatus() {
+    my $ug;
+    my $uuid;
+
+    $ug = Data::UUID -> new;
+    $uuid = $ug -> create_str();
     #($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst)
     @time = localtime(time());
     $time[4]++;
     $time[5] += 1900;
-    $logpath = $tmppath."/status-".$time[5]."-".$time[4]."-".$time[3]."-".$time[2]."-".$time[1]."-".$time[0].".log";
+    $logpath = $tmppath."/status-".$time[5]."-".$time[4]."-".$time[3]."-".$time[2]."-".$time[1]."-".$time[0].".log.".$uuid;
     $spell = $sudopath." /sbin/zfs list -t all >".$logpath." 2>&1";
     system($spell);
     parselog();
