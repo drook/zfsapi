@@ -285,7 +285,9 @@ sub getrelease() {
 
                         # locking the LUN
 
-                        $mtx = Mutex->new(path => "/tmp/ctladm-lun-".$blockdev.".lock");
+                        #$mtx = Mutex->new(path => "/tmp/ctladm-lun-".$blockdev.".lock");
+                        # global locking
+                        $mtx = Mutex->new();
                         $mtx -> impl();
                         $mtx -> lock();
 
@@ -1299,7 +1301,9 @@ sub targetcreate() {
         $spell = $sudopath." /usr/sbin/ctladm create -b block -o file=".$targetname." -o vendor=".$vendor." -o scsiname=".$scsiname." -o ctld_name=".$scsiname." -d ".$deviceid." -l ".$lunid." > ".$ctladmlogpath." 2>&1";
 
         # locking the LUN
-        $mtx = Mutex->new(path => "/tmp/ctladm-lun-".$lunid.".lock");
+        #$mtx = Mutex->new(path => "/tmp/ctladm-lun-".$lunid.".lock");
+        # global locking
+        $mtx = Mutex->new();
         $mtx -> impl();
         $mtx -> lock();
 
