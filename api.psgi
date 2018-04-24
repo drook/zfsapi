@@ -4,9 +4,10 @@ use strict;
 use English;
 use v5.14;
 use Data::UUID;
+use Mutex;
 
 #-----------------------------
-my $version = "2.0.24";
+my $version = "2.1.0";
 my $i;
 my $action = "null";
 my $snapsource = "null";
@@ -58,6 +59,7 @@ my %children;
 my $psgiresult = "";
 my $app;
 my $env;
+my $mtx;
 #-----------------------------
 
 sub getxmlhead(){
@@ -280,8 +282,19 @@ sub getrelease() {
                         $time[5] += 1900;
                         $victimfmt = $victim;
                         $victimfmt =~ s/\//_/g;
+
+                        # locking the LUN
+
+                        $mtx = Mutex->new(path => "/tmp/ctladm-lun-".$blockdev.".lock");
+                        $mtx -> impl();
+                        $mtx -> lock();
+
                         $logpath = $tmppath."/release-".$victimfmt."-".$time[5]."-".$time[4]."-".$time[3]."-".$time[2]."-".$time[1]."-".$time[0].".log";
                         $spell = $sudopath." /usr/sbin/ctladm remove -b block -l ".$blockdev." >".$logpath." 2>&1";
+
+                        # unlocking the LUN
+                        $mtx -> unlock();
+
                         if ($debug > 0) {
                             $psgiresult .= "<debug>".formatspell($spell)."</debug>\n";
                         }
@@ -1284,7 +1297,17 @@ sub targetcreate() {
 
         $ctladmlogpath = "/tmp/ctladm.log.".$uuid;
         $spell = $sudopath." /usr/sbin/ctladm create -b block -o file=".$targetname." -o vendor=".$vendor." -o scsiname=".$scsiname." -o ctld_name=".$scsiname." -d ".$deviceid." -l ".$lunid." > ".$ctladmlogpath." 2>&1";
+
+        # locking the LUN
+        $mtx = Mutex->new(path => "/tmp/ctladm-lun-".$lunid.".lock");
+        $mtx -> impl();
+        $mtx -> lock();
+
         system($spell);
+
+        # unlocking the LUN
+        $mtx -> unlock();
+
         open(CTLADMLOG, "<", $ctladmlogpath) or return 1;
         while (!eof(CTLADMLOG)) {
             $line = readline(*CTLADMLOG);
