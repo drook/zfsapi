@@ -4,10 +4,11 @@ use strict;
 use English;
 use v5.14;
 use Data::UUID;
-use Mutex;
+use IPC::SysV qw(IPC_PRIVATE S_IRUSR S_IWUSR IPC_CREAT IPC_EXCL);
+use IPC::Semaphore;
 
 #-----------------------------
-my $version = "2.1.0";
+my $version = "2.2.0";
 my $i;
 my $action = "null";
 my $snapsource = "null";
@@ -59,7 +60,7 @@ my %children;
 my $psgiresult = "";
 my $app;
 my $env;
-my $mtx;
+my $sem;
 #-----------------------------
 
 sub getxmlhead(){
@@ -76,6 +77,16 @@ sub dumpall() {
     foreach $i(keys(%ENV)) {
     $psgiresult .= "<env>".$i.": ".$ENV{$i}."</env>\n";
     }
+}
+
+sub lockCtlOp() {
+    $sem->op(0, 0, 0, 0, 1, 0);
+}
+
+sub unLockCtlOp() {
+    # if we are here, then it must be that the same process aquired the lock
+    # so we simply reset it
+    $sem->setval(0, 0);
 }
 
 sub parselog() {
@@ -284,18 +295,13 @@ sub getrelease() {
                         $victimfmt =~ s/\//_/g;
 
                         # locking the LUN
-
-                        #$mtx = Mutex->new(path => "/tmp/ctladm-lun-".$blockdev.".lock");
-                        # global locking
-                        $mtx = Mutex->new();
-                        $mtx -> impl();
-                        $mtx -> lock();
+                        lockCtlOp();
 
                         $logpath = $tmppath."/release-".$victimfmt."-".$time[5]."-".$time[4]."-".$time[3]."-".$time[2]."-".$time[1]."-".$time[0].".log";
                         $spell = $sudopath." /usr/sbin/ctladm remove -b block -l ".$blockdev." >".$logpath." 2>&1";
 
                         # unlocking the LUN
-                        $mtx -> unlock();
+                        unlockCtlOp();
 
                         if ($debug > 0) {
                             $psgiresult .= "<debug>".formatspell($spell)."</debug>\n";
@@ -1301,16 +1307,13 @@ sub targetcreate() {
         $spell = $sudopath." /usr/sbin/ctladm create -b block -o file=".$targetname." -o vendor=".$vendor." -o scsiname=".$scsiname." -o ctld_name=".$scsiname." -d ".$deviceid." -l ".$lunid." > ".$ctladmlogpath." 2>&1";
 
         # locking the LUN
-        #$mtx = Mutex->new(path => "/tmp/ctladm-lun-".$lunid.".lock");
         # global locking
-        $mtx = Mutex->new();
-        $mtx -> impl();
-        $mtx -> lock();
+        lockCtlOp();
 
         system($spell);
 
         # unlocking the LUN
-        $mtx -> unlock();
+        unLockCtlOp();
 
         open(CTLADMLOG, "<", $ctladmlogpath) or return 1;
         while (!eof(CTLADMLOG)) {
@@ -1380,6 +1383,16 @@ $app = sub {
     $deviceidinfo = "null";
     $vendorinfo = "null";
     $vendor = "null";
+
+    # creating or obtaining a semaphore for locking
+    # first trying to create new
+    unless (defined($sem)) {
+	$sem = IPC::Semaphore->new(49152, 1, 0722 | IPC_CREAT | IPC_EXCL);
+    }
+    unless ($sem) {
+	# seems like it exists already
+        $sem = IPC::Semaphore->new(49152, 1, 1) or die "could not obtain semaphore.";
+    }
 
     # parsing REQUEST_URI
     $env = shift;
