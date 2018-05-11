@@ -8,7 +8,7 @@ use IPC::SysV qw(IPC_PRIVATE S_IRUSR S_IWUSR IPC_CREAT IPC_EXCL);
 use IPC::Semaphore;
 
 #-----------------------------
-my $version = "2.2.1";
+my $version = "2.2.2";
 my $i;
 my $action = "null";
 my $snapsource = "null";
@@ -1313,7 +1313,7 @@ sub targetcreate() {
         system($spell);
 
         # unlocking the LUN
-        unLockCtlOp();
+        unlockCtlOp();
 
         open(CTLADMLOG, "<", $ctladmlogpath) or return 1;
         while (!eof(CTLADMLOG)) {
