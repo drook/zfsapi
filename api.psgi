@@ -8,7 +8,7 @@ use IPC::SysV qw(IPC_PRIVATE S_IRUSR S_IWUSR IPC_CREAT IPC_EXCL);
 use IPC::Semaphore;
 
 #-----------------------------
-my $version = "2.2.0";
+my $version = "2.2.1";
 my $i;
 my $action = "null";
 my $snapsource = "null";
@@ -83,7 +83,7 @@ sub lockCtlOp() {
     $sem->op(0, 0, 0, 0, 1, 0);
 }
 
-sub unLockCtlOp() {
+sub unlockCtlOp() {
     # if we are here, then it must be that the same process aquired the lock
     # so we simply reset it
     $sem->setval(0, 0);
