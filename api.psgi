@@ -8,7 +8,7 @@ use IPC::SysV qw(IPC_PRIVATE S_IRUSR S_IWUSR IPC_CREAT IPC_EXCL);
 use IPC::Semaphore;
 
 #-----------------------------
-my $version = "2.2.2";
+my $version = "2.2.3";
 my $i;
 my $action = "null";
 my $snapsource = "null";
@@ -270,7 +270,9 @@ sub getrelease() {
 
         $ctladmlogpath = "/tmp/ctladm.log.".$uuid;
         $spell = $sudopath." /usr/sbin/ctladm devlist -v > ".$ctladmlogpath." 2>&1";
+        lockCtlOp();
         system($spell);
+        unlockCtlOp();
         open(CTLADMLOG, "<", $ctladmlogpath) or return 1;
         while (!eof(CTLADMLOG) && $devicefound == 0) {
             $line = readline(*CTLADMLOG);
@@ -294,19 +296,17 @@ sub getrelease() {
                         $victimfmt = $victim;
                         $victimfmt =~ s/\//_/g;
 
-                        # locking the LUN
-                        lockCtlOp();
-
                         $logpath = $tmppath."/release-".$victimfmt."-".$time[5]."-".$time[4]."-".$time[3]."-".$time[2]."-".$time[1]."-".$time[0].".log";
                         $spell = $sudopath." /usr/sbin/ctladm remove -b block -l ".$blockdev." >".$logpath." 2>&1";
-
-                        # unlocking the LUN
-                        unlockCtlOp();
 
                         if ($debug > 0) {
                             $psgiresult .= "<debug>".formatspell($spell)."</debug>\n";
                         }
+                        # locking the LUN
+                        lockCtlOp();
                         system($spell);
+                        # unlocking the LUN
+                        unlockCtlOp();
                         parselog();
                     }
                 }
@@ -418,7 +418,9 @@ sub gettargetinfo() {
 
 	$ctladmlogpath = "/tmp/ctladm.log.".$uuid;
 	$spell = $sudopath." /usr/sbin/ctladm devlist -v > ".$ctladmlogpath." 2>&1";
+	lockCtlOp();
 	system($spell);
+	unlockCtlOp();
 	open(CTLADMLOG, "<", $ctladmlogpath) or return 1;
 	while (!eof(CTLADMLOG) && $devicefound == 0) {
 	    $line = readline(*CTLADMLOG);
