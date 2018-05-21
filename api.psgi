@@ -8,7 +8,7 @@ use IPC::SysV qw(IPC_PRIVATE S_IRUSR S_IWUSR IPC_CREAT IPC_EXCL);
 use IPC::Semaphore;
 
 #-----------------------------
-my $version = "2.3.0";
+my $version = "2.3.1";
 my $i;
 my $action = "null";
 my $snapsource = "null";
@@ -1415,10 +1415,10 @@ $app = sub {
 
     # creating or obtaining a semaphore for ctl.conf locking
     # first trying to create new
-    unless (defined($sem)) {
+    unless (defined($confsem)) {
 	$confsem = IPC::Semaphore->new(49153, 1, 0722 | IPC_CREAT | IPC_EXCL);
     }
-    unless ($sem) {
+    unless ($confsem) {
 	# seems like it exists already
         $confsem = IPC::Semaphore->new(49153, 1, 1) or die "could not obtain semaphore.";
     }
