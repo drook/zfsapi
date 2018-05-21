@@ -8,7 +8,7 @@ use IPC::SysV qw(IPC_PRIVATE S_IRUSR S_IWUSR IPC_CREAT IPC_EXCL);
 use IPC::Semaphore;
 
 #-----------------------------
-my $version = "2.2.3";
+my $version = "2.3.0";
 my $i;
 my $action = "null";
 my $snapsource = "null";
@@ -61,6 +61,7 @@ my $psgiresult = "";
 my $app;
 my $env;
 my $sem;
+my $confsem;
 #-----------------------------
 
 sub getxmlhead(){
@@ -87,6 +88,16 @@ sub unlockCtlOp() {
     # if we are here, then it must be that the same process aquired the lock
     # so we simply reset it
     $sem->setval(0, 0);
+}
+
+sub lockConfOp() {
+    $confsem->op(0, 0, 0, 0, 1, 0);
+}
+
+sub unlockConfOp() {
+    # if we are here, then it must be that the same process aquired the lock
+    # so we simply reset it
+    $confsem->setval(0, 0);
 }
 
 sub parselog() {
@@ -579,7 +590,9 @@ sub enabletarget() {
 	$spell = $sudopath." /bin/chmod 600 ".$ctlconfpath.".new";
 	system($spell);
 	$spell = $sudopath." /bin/mv ".$ctlconfpath.".new /etc/ctl.conf";
+	lockConfOp();
 	system($spell);
+	unlockConfOp();
 	if ($debug > 0) {
 	    $psgiresult .= "<debug>returning 0</debug>\n";
 	}
@@ -658,7 +671,9 @@ sub disabletarget() {
 	$spell = $sudopath." /bin/chmod 600 ".$ctlconfpath.".new";
 	system($spell);
 	$spell = $sudopath." /bin/mv ".$ctlconfpath.".new /etc/ctl.conf";
+	lockConfOp();
 	system($spell);
+	unlockConfOp();
 	$spell = $sudopath." /usr/sbin/chown zfsreplica:www ".$ctlconfpath;
 	system($spell);
 	if ($debug == 0) {
@@ -740,7 +755,9 @@ sub mounttarget() {
 	$spell = $sudopath." /bin/chmod 600 ".$ctlconfpath.".new";
 	system($spell);
 	$spell = $sudopath." /bin/mv ".$ctlconfpath.".new /etc/ctl.conf";
+	lockConfOp();
 	system($spell);
+	unlockConfOp();
 	$spell = $sudopath." /usr/sbin/chown zfsreplica:www ".$ctlconfpath;
 	system($spell);
 	if ($debug == 0) {
@@ -1386,7 +1403,7 @@ $app = sub {
     $vendorinfo = "null";
     $vendor = "null";
 
-    # creating or obtaining a semaphore for locking
+    # creating or obtaining a semaphore for CTL locking
     # first trying to create new
     unless (defined($sem)) {
 	$sem = IPC::Semaphore->new(49152, 1, 0722 | IPC_CREAT | IPC_EXCL);
@@ -1394,6 +1411,16 @@ $app = sub {
     unless ($sem) {
 	# seems like it exists already
         $sem = IPC::Semaphore->new(49152, 1, 1) or die "could not obtain semaphore.";
+    }
+
+    # creating or obtaining a semaphore for ctl.conf locking
+    # first trying to create new
+    unless (defined($sem)) {
+	$confsem = IPC::Semaphore->new(49153, 1, 0722 | IPC_CREAT | IPC_EXCL);
+    }
+    unless ($sem) {
+	# seems like it exists already
+        $confsem = IPC::Semaphore->new(49153, 1, 1) or die "could not obtain semaphore.";
     }
 
     # parsing REQUEST_URI
