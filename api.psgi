@@ -8,7 +8,7 @@ use IPC::SysV qw(IPC_PRIVATE S_IRUSR S_IWUSR IPC_CREAT IPC_EXCL);
 use IPC::Semaphore;
 
 #-----------------------------
-my $version = "2.3.1";
+my $version = "2.4.0";
 my $i;
 my $action = "null";
 my $snapsource = "null";
@@ -62,6 +62,12 @@ my $app;
 my $env;
 my $sem;
 my $confsem;
+
+# startup sequence indication
+my $juststarted = 1;
+
+# simple stats
+my $requests = 0;
 #-----------------------------
 
 sub getxmlhead(){
@@ -76,7 +82,7 @@ sub getxmlfoot(){
 sub dumpall() {
     $i = 0;
     foreach $i(keys(%ENV)) {
-    $psgiresult .= "<env>".$i.": ".$ENV{$i}."</env>\n";
+	$psgiresult .= "<env>".$i.": ".$ENV{$i}."</env>\n";
     }
 }
 
@@ -215,6 +221,40 @@ sub getclone() {
 	$errormessage = "missing snapshot source or snapshot name.";
 	return 1;
     }
+}
+
+sub getipcstats() {
+    sub getProperTime {
+	my $unixtime = shift;
+
+	#($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst)
+	@time = localtime($unixtime);
+	$time[4]++;
+	$time[5] += 1900;
+
+	return $time[3]."/".$time[4]."/".$time[5]." ".$time[2].":".$time[1].":".$time[0];
+    }
+    my $buf;
+    my $value;
+    my $otime;
+    my $ctime;
+
+    #($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst)
+    $value = $sem -> getval(0);
+    $buf = $sem -> stat(0);
+    $ctime = $buf -> [5];
+    $otime = $buf -> [6];
+
+    $psgiresult .= "<mainsemaphore><value>".$value."</value><ctime>".getProperTime($ctime)."</ctime><otime>".getProperTime($otime)."</otime></mainsemaphore>\n";
+
+    $value = $confsem -> getval(0);
+    $buf = $confsem -> stat(0);
+    $ctime = $buf -> [5];
+    $otime = $buf -> [6];
+
+    $psgiresult .= "<confsemaphore><value>".$value."</value><ctime>".getProperTime($ctime)."</ctime><otime>".getProperTime($otime)."</otime></confsemaphore>\n";
+
+    return 0;
 }
 
 sub getstatus() {
@@ -1412,6 +1452,10 @@ $app = sub {
 	# seems like it exists already
         $sem = IPC::Semaphore->new(49152, 1, 1) or die "could not obtain semaphore.";
     }
+    # so we created or obtained a new one, let's reset it now if we've been just started
+    if ($juststarted == 1) {
+	$sem->setval(0, 0);
+    }
 
     # creating or obtaining a semaphore for ctl.conf locking
     # first trying to create new
@@ -1421,6 +1465,15 @@ $app = sub {
     unless ($confsem) {
 	# seems like it exists already
         $confsem = IPC::Semaphore->new(49153, 1, 1) or die "could not obtain semaphore.";
+    }
+    # so we created or obtained a new one, let's reset it now if we've been just started
+    if ($juststarted == 1) {
+	# finishing the startup sequence
+	$juststarted = 0;
+	$confsem->setval(0, 0);
+
+	# a timeout to disallow neighbor workers setting up the semaphore again
+	sleep 5;
     }
 
     # parsing REQUEST_URI
@@ -1627,6 +1680,10 @@ $app = sub {
             handlestatus();
             last ACTION;
         }
+        if (/^ipcstats/) {
+            $result = getipcstats();
+            last ACTION;
+        }
         if (/^targetmount/) {
             $psgiresult .= "<targetname>".$targetname."</targetname>\n";
             $psgiresult .= "<device>".$device."</device>\n";
@@ -1813,6 +1870,7 @@ $app = sub {
         $psgiresult .= "<status>You have requested something that I don't understand.</status>\n";
     }
     getxmlfoot();
+    $requests++;
 
     return [
     '200',
