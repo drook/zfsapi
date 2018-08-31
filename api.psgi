@@ -8,7 +8,7 @@ use IPC::SysV qw(IPC_PRIVATE S_IRUSR S_IWUSR IPC_CREAT IPC_EXCL);
 use IPC::Semaphore;
 
 #-----------------------------
-my $version = "2.4.0";
+my $version = "2.4.1";
 my $i;
 my $action = "null";
 my $snapsource = "null";
@@ -39,6 +39,7 @@ my @tmp;
 my @time;
 my $logpath;
 my $result;
+my $parselogresult;
 my @logcontents;
 my $line;
 my $remotedcip;
@@ -131,8 +132,10 @@ sub parselog() {
 	if ($debug == 0) {
 	    unlink($logpath);
 	}
+	return 0;
     } else {
 	$psgiresult .= "<parselog>cannot open log ".$logpath."</parselog>\n";
+	return 1;
     }
 }
 
@@ -147,10 +150,10 @@ sub getsnapshot() {
 	$logpath = $tmppath."/snapshot-".$snapsourcefmt."-".$snapname."-".$time[5]."-".$time[4]."-".$time[3]."-".$time[2]."-".$time[1]."-".$time[0].".log";
 	$spell = $sudopath." /sbin/zfs snapshot ".$snapsource."@".$snapname." >".$logpath." 2>&1";
 	system($spell);
-	parselog();
-	if (@logcontents > 0) {
+	$parselogresult = parselog();
+	if (@logcontents > 0 || $parselogresult != 0) {
 	    $errormessage = "log file not empty.";
-	return 1;
+	    return 1;
 	} else {
 	    if ($debug == 0) {
 		#unlink($logpath);
@@ -179,8 +182,8 @@ sub getbookmark() {
 	$logpath = $tmppath."/bookmark-".$snapsourcefmt."-".$bookmarkname."-".$time[5]."-".$time[4]."-".$time[3]."-".$time[2]."-".$time[1]."-".$time[0].".log";
 	$spell = $sudopath." /sbin/zfs bookmark ".$snapsource." ".$source."#".$bookmarkname." >".$logpath." 2>&1";
 	system($spell);
-	parselog();
-	if (@logcontents > 0) {
+	$parselogresult = parselog();
+	if (@logcontents > 0 || $parselogresult != 0) {
 	    $errormessage = "log file not empty.";
 	    return 1;
 	} else {
@@ -207,11 +210,11 @@ sub getclone() {
 	$logpath = $tmppath."/clone-".$clonesourcefmt."-".$clonenamefmt."-".$time[5]."-".$time[4]."-".$time[3]."-".$time[2]."-".$time[1]."-".$time[0].".log";
 	$spell = $sudopath." /sbin/zfs clone ".$clonesource." ".$clonename." >".$logpath." 2>&1";
 	system($spell);
-	parselog();
+	$parselogresult = parselog();
 	if ($debug == 0) {
 	    #unlink($logpath);
 	}
-	if (@logcontents > 0) {
+	if (@logcontents > 0 || $parselogresult != 0) {
 	    $errormessage = "log file not empty.";
 	    return 1;
 	} else {
@@ -270,11 +273,15 @@ sub getstatus() {
     $logpath = $tmppath."/status-".$time[5]."-".$time[4]."-".$time[3]."-".$time[2]."-".$time[1]."-".$time[0].".log.".$uuid;
     $spell = $sudopath." /sbin/zfs list -t all >".$logpath." 2>&1";
     system($spell);
-    parselog();
+    $parselogresult = parselog();
     if ($debug == 0) {
 	#unlink($logpath);
     }
-    return 0;
+    if ($parselogresult == 0) {
+	return 0;
+    } else {
+	return 1;
+    }
 }
 
 sub getreload() {
@@ -285,11 +292,15 @@ sub getreload() {
     $logpath = $tmppath."/reload-".$time[5]."-".$time[4]."-".$time[3]."-".$time[2]."-".$time[1]."-".$time[0].".log";
     $spell = $sudopath." /usr/sbin/service ctld reload >".$logpath." 2>&1";
     system($spell);
-    parselog();
+    $parselogresult = parselog();
     if ($debug == 0) {
 	#unlink($logpath);
     }
-    return 0;
+    if ($parselogresult == 0) {
+	return 0;
+    } else {
+	return 1;
+    }
 }
 
 sub formatspell {
@@ -358,7 +369,7 @@ sub getrelease() {
                         system($spell);
                         # unlocking the LUN
                         unlockCtlOp();
-                        parselog();
+                        $parselogresult = parselog();
                     }
                 }
             }
@@ -369,10 +380,10 @@ sub getrelease() {
             unlink($logpath);
             unlink($ctladmlogpath);
         }
-        if (@logcontents == 1 && $logcontents[0] =~ /LUN \d+ removed successfully/) {
+        if (@logcontents == 1  && $parselogresult == 0 && $logcontents[0] =~ /LUN \d+ removed successfully/) {
             return 0;
         } else {
-            $errormessage = "log file tells me something got wrong.";
+            $errormessage = "log file tells me something got wrong (or cannot open log).";
             return 1;
         }
         if ($devicefound == 0) {
@@ -541,11 +552,11 @@ sub destroyentity() {
 	$logpath = $tmppath."/destroy-".$victimfmt."-".$time[5]."-".$time[4]."-".$time[3]."-".$time[2]."-".$time[1]."-".$time[0].".log";
 	$spell = $sudopath." /sbin/zfs destroy ".$victim." >".$logpath." 2>&1";
 	system($spell);
-	parselog();
+	$parselogresult = parselog();
 	if ($debug == 0) {
 	    #unlink($logpath);
 	}
-	if (@logcontents > 0) {
+	if (@logcontents > 0 || $parselogresult != 0) {
 	    $errormessage = "log file not empty.";
 	    return 1;
 	} else {
@@ -568,11 +579,11 @@ sub getrollback() {
 	$logpath = $tmppath."/rollback-".$snapshotfmt."-".$time[5]."-".$time[4]."-".$time[3]."-".$time[2]."-".$time[1]."-".$time[0].".log";
 	$spell = $sudopath." /sbin/zfs rollback ".$snapshot." >".$logpath." 2>&1";
 	system($spell);
-	parselog();
+	$parselogresult = parselog();
 	if ($debug > 0) {
 	    $psgiresult .= "<debug>log contents array is ".scalar(@logcontents)." elements long</debug>\n";
 	}
-	if (scalar(@logcontents) > 0) {
+	if (scalar(@logcontents) > 0 || $parselogresult != 0) {
 	    $errormessage = $logcontents[0];
 	    return 1;
 	} else {
@@ -1442,6 +1453,7 @@ $app = sub {
     $deviceidinfo = "null";
     $vendorinfo = "null";
     $vendor = "null";
+    $parselogresult = "null";
 
     # creating or obtaining a semaphore for CTL locking
     # first trying to create new
