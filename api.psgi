@@ -8,7 +8,7 @@ use IPC::SysV qw(IPC_PRIVATE S_IRUSR S_IWUSR IPC_CREAT IPC_EXCL);
 use IPC::Semaphore;
 
 #-----------------------------
-my $version = "2.4.1";
+my $version = "2.4.2";
 my $i;
 my $action = "null";
 my $snapsource = "null";
@@ -129,7 +129,7 @@ sub parselog() {
 	    $psgiresult .= "<debug>log contents array is ".scalar(@logcontents)." elements long</debug>\n";
 	}
 	close(LOG);
-	if ($debug == 0) {
+	if ($debug == 0 && scalar(@logcontents) == 0) {
 	    unlink($logpath);
 	}
 	return 0;
