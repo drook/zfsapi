@@ -8,7 +8,7 @@ use IPC::SysV qw(IPC_PRIVATE S_IRUSR S_IWUSR IPC_CREAT IPC_EXCL);
 use IPC::Semaphore;
 
 #-----------------------------
-my $version = "2.4.2";
+my $version = "2.4.4";
 my $i;
 my $action = "null";
 my $snapsource = "null";
@@ -55,7 +55,7 @@ my $sudopath = "/usr/local/bin/sudo";
 my $tmppath = "/tmp";
 my $loglocation = "/var/log/zfsreplica";
 # debug: 0 - none, 1 - basic, 2 - extensive
-my $debug = 0;
+my $debug = 1;
 my %children;
 
 my $psgiresult = "";
@@ -155,9 +155,6 @@ sub getsnapshot() {
 	    $errormessage = "log file not empty.";
 	    return 1;
 	} else {
-	    if ($debug == 0) {
-		#unlink($logpath);
-	    }
 	    return 0;
 	}
     } else {
@@ -187,9 +184,6 @@ sub getbookmark() {
 	    $errormessage = "log file not empty.";
 	    return 1;
 	} else {
-	    if ($debug == 0) {
-		#unlink($logpath);
-	    }
 	    return 0;
 	}
     } else {
@@ -211,9 +205,6 @@ sub getclone() {
 	$spell = $sudopath." /sbin/zfs clone ".$clonesource." ".$clonename." >".$logpath." 2>&1";
 	system($spell);
 	$parselogresult = parselog();
-	if ($debug == 0) {
-	    #unlink($logpath);
-	}
 	if (@logcontents > 0 || $parselogresult != 0) {
 	    $errormessage = "log file not empty.";
 	    return 1;
@@ -274,9 +265,6 @@ sub getstatus() {
     $spell = $sudopath." /sbin/zfs list -t all >".$logpath." 2>&1";
     system($spell);
     $parselogresult = parselog();
-    if ($debug == 0) {
-	#unlink($logpath);
-    }
     if ($parselogresult == 0) {
 	return 0;
     } else {
@@ -293,9 +281,6 @@ sub getreload() {
     $spell = $sudopath." /usr/sbin/service ctld reload >".$logpath." 2>&1";
     system($spell);
     $parselogresult = parselog();
-    if ($debug == 0) {
-	#unlink($logpath);
-    }
     if ($parselogresult == 0) {
 	return 0;
     } else {
@@ -376,7 +361,7 @@ sub getrelease() {
             $ctladmlines++;
         }
         close(CTLADMLOG);
-        if ($debug == 0) {
+        if ($debug == 0 && @logcontents == 1) {
             unlink($logpath);
             unlink($ctladmlogpath);
         }
@@ -519,7 +504,6 @@ sub gettargetinfo() {
 	}
 	close(CTLADMLOG);
 	if ($debug == 0) {
-	    #unlink($logpath);
 	    unlink($ctladmlogpath);
 	}
 
@@ -553,9 +537,6 @@ sub destroyentity() {
 	$spell = $sudopath." /sbin/zfs destroy ".$victim." >".$logpath." 2>&1";
 	system($spell);
 	$parselogresult = parselog();
-	if ($debug == 0) {
-	    #unlink($logpath);
-	}
 	if (@logcontents > 0 || $parselogresult != 0) {
 	    $errormessage = "log file not empty.";
 	    return 1;
@@ -651,7 +632,6 @@ sub enabletarget() {
 	system($spell);
 	if ($debug == 0) {
 	    unlink($ctlconfpath);
-	    #unlink($logpath);
 	}
 	if ($targetfound > 0) {
 	    return 0;
@@ -729,7 +709,6 @@ sub disabletarget() {
 	system($spell);
 	if ($debug == 0) {
 	    unlink($ctlconfpath);
-	    #unlink($logpath);
 	}
 	if ($targetfound > 0) {
 	    if ($debug > 0) {
@@ -813,7 +792,6 @@ sub mounttarget() {
 	system($spell);
 	if ($debug == 0) {
 	    unlink($ctlconfpath);
-	    #unlink($logpath);
 	}
 	if ($targetmodified > 0) {
 	    if ($debug > 0) {
@@ -821,7 +799,7 @@ sub mounttarget() {
 	    }
 	    return 0;
 	} else {
-	    if ($debug < 0) {
+	    if ($debug > 0) {
 		$psgiresult .= "<debug>returning 1</debug>\n";
 	    }
 	    return 1;
@@ -1454,6 +1432,7 @@ $app = sub {
     $vendorinfo = "null";
     $vendor = "null";
     $parselogresult = "null";
+    undef(@logcontents);
 
     # creating or obtaining a semaphore for CTL locking
     # first trying to create new
