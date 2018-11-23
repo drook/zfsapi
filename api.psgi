@@ -8,7 +8,7 @@ use IPC::SysV qw(IPC_PRIVATE S_IRUSR S_IWUSR IPC_CREAT IPC_EXCL);
 use IPC::Semaphore;
 
 #-----------------------------
-my $version = "2.4.4";
+my $version = "2.4.5";
 my $i;
 my $action = "null";
 my $snapsource = "null";
@@ -55,7 +55,7 @@ my $sudopath = "/usr/local/bin/sudo";
 my $tmppath = "/tmp";
 my $loglocation = "/var/log/zfsreplica";
 # debug: 0 - none, 1 - basic, 2 - extensive
-my $debug = 1;
+my $debug = 0;
 my %children;
 
 my $psgiresult = "";
@@ -300,7 +300,6 @@ sub formatspell {
 }
 
 sub getrelease() {
-
     my $ug;
     my $uuid;
     my $ctladmlogpath;
@@ -310,13 +309,33 @@ sub getrelease() {
 
     my $blockdev;
     my $vdev;
+    my $lunname;
+    my $victimshortname;
+
+    if ($debug > 1) {
+        $psgiresult .= "<debug>got inside getrelase().</debug>\n";
+    }
 
     if (defined($victim) && $victim ne "null") {
+	if ($debug > 1) {
+	    $psgiresult .= "<debug>victim name defined and is not null.</debug>\n";
+	}
         $ug = Data::UUID -> new;
         $uuid = $ug -> create_str();
+        @temp = split('/',$victim);
+        $victimshortname = $temp[scalar(@temp) - 1];
+	if ($debug > 1) {
+	    $psgiresult .= "<debug>victim short name: ".$victimshortname.".</debug>\n";
+	}
 
         $ctladmlogpath = "/tmp/ctladm.log.".$uuid;
+	if ($debug > 1) {
+	    $psgiresult .= "<debug>ctladm log path: ".$ctladmlogpath.".</debug>\n";
+	}
         $spell = $sudopath." /usr/sbin/ctladm devlist -v > ".$ctladmlogpath." 2>&1";
+	if ($debug > 1) {
+	    $psgiresult .= "<debug>calling spell.</debug>\n";
+	}
         lockCtlOp();
         system($spell);
         unlockCtlOp();
@@ -336,6 +355,9 @@ sub getrelease() {
 
                     if ($vdev eq '/dev/zvol/'.$victim ) {
                         # we found our victim
+			if ($debug > 1) {
+			    $psgiresult .= "<debug>found our victim using file backend path.</debug>\n";
+			}
                         $devicefound = 1;
                         @time = localtime(time());
                         $time[4]++;
@@ -354,6 +376,9 @@ sub getrelease() {
                         system($spell);
                         # unlocking the LUN
                         unlockCtlOp();
+                        if ($debug > 1) {
+                            $psgiresult .= "<debug>calling parselog ()</debug>\n";
+                        }
                         $parselogresult = parselog();
                     }
                 }
@@ -361,22 +386,77 @@ sub getrelease() {
             $ctladmlines++;
         }
         close(CTLADMLOG);
+        if ($devicefound == 0) {
+            # we didn't find our device, lets retry with lun name
+            open(CTLADMLOG, "<", $ctladmlogpath) or return 1;
+            while (!eof(CTLADMLOG) && $devicefound == 0) {
+                $line = readline(*CTLADMLOG);
+                chomp($line);
+
+                if ($line =~ /^[\s\t]*\d+ block/) {
+                    $line =~ s/^\s+//;
+                    @temp = split(/\s+/, $line);
+                    $blockdev = $temp[0];
+                    $lunname = $temp[5];
+
+                    if ($lunname eq $victimshortname ) {
+                        # we found our victim
+		        if ($debug > 1) {
+		            $psgiresult .= "<debug>found our victim using shortname.</debug>\n";
+		        }
+                        $devicefound = 1;
+                        @time = localtime(time());
+                        $time[4]++;
+                        $time[5] += 1900;
+                        $victimfmt = $victim;
+                        $victimfmt =~ s/\//_/g;
+
+                        $logpath = $tmppath."/release-".$victimfmt."-".$time[5]."-".$time[4]."-".$time[3]."-".$time[2]."-".$time[1]."-".$time[0].".log";
+                        $spell = $sudopath." /usr/sbin/ctladm remove -b block -l ".$blockdev." >".$logpath." 2>&1";
+
+                        if ($debug > 0) {
+                            $psgiresult .= "<debug>".formatspell($spell)."</debug>\n";
+                        }
+                        # locking the LUN
+                        lockCtlOp();
+                        system($spell);
+                        # unlocking the LUN
+                        unlockCtlOp();
+                        if ($debug > 1) {
+                            $psgiresult .= "<debug>calling parselog ()</debug>\n";
+                        }
+                        $parselogresult = parselog();
+                    }
+                }
+                $ctladmlines++;
+            }
+            close(CTLADMLOG);
+        }
         if ($debug == 0 && @logcontents == 1) {
             unlink($logpath);
             unlink($ctladmlogpath);
         }
-        if (@logcontents == 1  && $parselogresult == 0 && $logcontents[0] =~ /LUN \d+ removed successfully/) {
-            return 0;
-        } else {
-            $errormessage = "log file tells me something got wrong (or cannot open log).";
+        if ($ctladmlines <= 1) {
+            $errormessage = "ctladm log is empty, check sudo permissions.";
             return 1;
         }
         if ($devicefound == 0) {
             $errormessage = "didn't find device to release.";
             return 1;
         }
-        if ($ctladmlines <= 1) {
-            $errormessage = "ctladm log is empty, check sudo permissions.";
+        if (@logcontents == 1  && $parselogresult == 0 && $logcontents[0] =~ /LUN \d+ removed successfully/ && $devicefound == 1) {
+            return 0;
+        } else {
+            if ($debug > 0) {
+                $psgiresult .= "<debug>ctladm log lines parsed: ".$ctladmlines."</debug>\n";
+                $psgiresult .= "<debug>device found: ".$devicefound."</debug>\n";
+                $psgiresult .= "<debug>parselogresult: ".$parselogresult."</debug>\n";
+                $psgiresult .= "<debug>log content lines: ".scalar(@logcontents)."</debug>\n";
+                if (@logcontents > 0) {
+                    $psgiresult .= "<debug>first log line: ".$logcontents[0]."</debug>\n";
+                }
+            }
+            $errormessage = "log file tells me something got wrong (or cannot open log).";
             return 1;
         }
     } else {
