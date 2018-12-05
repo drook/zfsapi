@@ -8,7 +8,7 @@ use IPC::SysV qw(IPC_PRIVATE S_IRUSR S_IWUSR IPC_CREAT IPC_EXCL);
 use IPC::Semaphore;
 
 #-----------------------------
-my $version = "2.4.5";
+my $version = "2.4.6";
 my $i;
 my $action = "null";
 my $snapsource = "null";
@@ -1333,7 +1333,7 @@ sub senddelta() {
 	}
 	$startedat = time();
 
-	$spell = "/usr/local/bin/sudo zfs send -vi ".$startsnapshot." ".$endsnapshot." 2>>".$logpath." | ssh ".$remotedcip." sudo zfs receive -d ".$remotedataset." 2>>".$logpath." &";
+	$spell = "/usr/local/bin/sudo zfs send -vi ".$startsnapshot." ".$endsnapshot." 2>>".$logpath." | /usr/local/bin/pv -q -L 500M 2>>".$logpath." | ssh ".$remotedcip." sudo zfs receive -d ".$remotedataset." 2>>".$logpath." &";
 
 	uwsgi::spool({spell => $spell});
 
@@ -1382,7 +1382,7 @@ sub senddelta() {
 	}
 	$startedat = time();
 
-	$spell = "/usr/local/bin/sudo zfs send -vi ".$startsnapshot." ".$endsnapshot." 2>>".$logpath." | ssh ".$remotedcip." sudo zfs receive -d ".$remotedataset." 2>>".$logpath." &";
+	$spell = "/usr/local/bin/sudo zfs send -vi ".$startsnapshot." ".$endsnapshot." 2>>".$logpath." | /usr/local/bin/pv -q -L 500M 2>>".$logpath." | ssh ".$remotedcip." sudo zfs receive -d ".$remotedataset." 2>>".$logpath." &";
 
 	uwsgi::spool({spell => $spell});
 
