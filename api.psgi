@@ -8,7 +8,7 @@ use IPC::SysV qw(IPC_PRIVATE S_IRUSR S_IWUSR IPC_CREAT IPC_EXCL);
 use IPC::Semaphore;
 
 #-----------------------------
-my $version = "2.4.7";
+my $version = "2.5.0";
 my $i;
 my $action = "null";
 my $snapsource = "null";
@@ -1474,6 +1474,135 @@ sub targetcreate() {
     }
 }
 
+sub diffcreate() {
+
+    my $logpath;
+    my $ug;
+    my $uuid;
+    my $firstsnapexists = 0;
+    my $secondsnapexists = 0;
+    my $line;
+    my @tmp;
+    my $startsnapshotescaped;
+    my $endsnapshotescaped;
+    my $startedat;
+    my $formattedspell;
+
+    $startedat = time();
+    if (defined($startsnapshot) && defined($endsnapshot)) {
+    
+	$ug = Data::UUID -> new;
+	$uuid = $ug -> create_str();
+	$logpath = "/tmp/zfs-list-local.log.".$uuid;
+	
+	# make sure local snapshots exist
+	$spell = "zfs list -t snapshot | egrep -v 'NAME +USED' >".$logpath;
+	system($spell);
+	open(LOG, "<".$logpath);
+	if ($debug > 1) {
+		$psgiresult .= "<debug>\n";
+	}
+	while (!eof(LOG) && ($firstsnapexists == 0 || $secondsnapexists == 0)) {
+	    if ($debug > 1) {
+	        $psgiresult .= "<firstsnapexists>".$firstsnapexists."</firstsnapexists>\n";
+	        $psgiresult .= "<secondsnapexists>".$secondsnapexists."</secondsnapexists>\n";
+	    }
+	    $line = readline(LOG);
+	    chomp($line);
+	    @tmp = split(/[\s\t]+/, $line);
+	    if ($debug > 1) {
+		$psgiresult .= "<line>".$tmp[0]."</line>\n";
+	    }
+	    if ($tmp[0] eq $startsnapshot) {
+		if ($debug > 1) {
+		    $psgiresult .= "<startercondition>matched</startercondition>\n";
+		}
+		$firstsnapexists = 1;
+	    } else {
+		if ($debug > 1) {
+		    $psgiresult .= "<startercondition>not matched</startercondition>\n";
+		}
+		if ($debug > 1) {
+		    $psgiresult .= "<comparsion>".$tmp[0]." doesn't match the ".$startsnapshot."</comparsion>\n";
+		}
+		if ($tmp[0] eq $endsnapshot) {
+		    if ($debug > 1) {
+			$psgiresult .= "<endcondition>matched</endcondition>\n";
+		    }
+		    $secondsnapexists = 1;
+		} else {
+		    if ($debug > 1) {
+			$psgiresult .= "<endcondition>not matched</endcondition>\n";
+			$psgiresult .= "<comparsion>".$tmp[0]." doesn't match the ".$endsnapshot."</comparsion>\n";
+		    }
+		}
+	    }
+	}
+	close(LOG);
+	if ($debug == 0) {
+	    unlink($logpath);
+	}
+	if ($debug > 1) {
+	    $psgiresult .= "</debug>\n";
+	}
+
+	if ($debug > 0) {
+	    $psgiresult .= "<debug>\n";
+	    $psgiresult .= "<firstsnapexists>".$firstsnapexists."</firstsnapexists>\n";
+	    $psgiresult .= "<secondsnapexists>".$secondsnapexists."</secondsnapexists>\n";
+	    $psgiresult .= "</debug>\n";
+	}
+	# if they don't exist - then bail out
+	if ($firstsnapexists == 0 || $secondsnapexists == 0) {
+	    if ($firstsnapexists == 0) {
+		$errormessage = "start snapshot doesn't exist on local side.";
+	    } else {
+		$errormessage = "end snapshot doesn't exist on local side.";
+	    }
+	    return 1;
+	}
+
+	# now create diff
+	$startsnapshotescaped = $startsnapshot;
+	$startsnapshotescaped =~ s/\//--/g;
+	$endsnapshotescaped = $endsnapshot;
+	$endsnapshotescaped =~ s/\//--/g;
+	$logpath = $loglocation."/zfs-diffcreate-".$startsnapshotescaped."-".$endsnapshotescaped.".log";
+	if ($debug > 0) {
+	    $psgiresult .= "<debug>\n";
+	    $psgiresult .= "<firstsnapexistsonremote>".$firstsnapexists."</firstsnapexistsonremote>\n";
+	    $psgiresult .= "<secondsnapexistsonremote>".$secondsnapexists."</secondsnapexistsonremote>\n";
+
+	    $psgiresult .= "<debug>okay to create the diff.</debug>\n";
+	    $psgiresult .= "<logpath>".$logpath."</logpath>\n";
+	    $psgiresult .= "</debug>\n";
+	}
+	$startedat = time();
+
+	$spell = "/usr/local/bin/sudo zfs send -vI ".$startsnapshot." ".$endsnapshot." > /tmp/".$startsnapshotescaped."-".$endsnapshotescaped.".diff &";  # TODO: 2>>".$logpath."
+
+	uwsgi::spool({spell => $spell});
+
+	if ($debug > 0) {
+	    $formattedspell = $spell;
+	    $formattedspell =~ s/&/&amp;/g;
+	    $psgiresult .= "<debug>replication spell: ".$formattedspell."</debug>\n";
+	}
+	if ($debug > 0) {
+	    $psgiresult .= "<debug>zfs send invocation took ".(time() - $startedat)." seconds</debug>\n";
+	}
+	return 0;
+    
+    } else {
+		if (!defined($startsnapshot)) {
+        	    $errormessage = "start snapshot not supplied.";
+		} else {
+        	    $errormessage = "end snapshot not supplied.";
+		}
+	return 1;
+    }
+}
+
 uwsgi::spooler(
     sub {
         my ($env) = @_;
@@ -1931,6 +2060,18 @@ $app = sub {
                 if($infomessage ne "") {
                     $psgiresult .= "<info>".$infomessage."</info>\n";
                 }
+            } else {
+                $psgiresult .= "<status>error</status>\n";
+                $psgiresult .= "<errormessage>".$errormessage."</errormessage>\n";
+            }
+            last ACTION;
+        }
+        if (/^diffcreate$/) {
+            $psgiresult .= "<startsnapshot>".$startsnapshot."</startsnapshot>\n";
+            $psgiresult .= "<endsnapshot>".$endsnapshot."</endsnapshot>\n";
+            $result = diffcreate();
+            if ($result == 0) {
+                $psgiresult .= "<status>success</status>\n";
             } else {
                 $psgiresult .= "<status>error</status>\n";
                 $psgiresult .= "<errormessage>".$errormessage."</errormessage>\n";
