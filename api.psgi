@@ -54,6 +54,7 @@ my $ctlconfpath = "/tmp/ctl.conf";
 my $sudopath = "/usr/local/bin/sudo";
 my $tmppath = "/tmp";
 my $loglocation = "/var/log/zfsreplica";
+my $diffpath = "/var/www/";
 # debug: 0 - none, 1 - basic, 2 - extensive
 my $debug = 0;
 my %children;
@@ -1579,7 +1580,7 @@ sub diffcreate() {
 	}
 	$startedat = time();
 
-	$spell = "/usr/local/bin/sudo zfs send -vI ".$startsnapshot." ".$endsnapshot." > /tmp/".$startsnapshotescaped."-".$endsnapshotescaped.".diff &";  # TODO: 2>>".$logpath."
+	$spell = "/usr/local/bin/sudo zfs send -vI ".$startsnapshot." ".$endsnapshot." > ".$diffpath.$startsnapshotescaped."-".$endsnapshotescaped.".diff &";  # TODO: 2>>".$logpath."
 
 	uwsgi::spool({spell => $spell});
 
