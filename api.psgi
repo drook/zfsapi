@@ -1840,6 +1840,7 @@ $app = sub {
 	    if (defined($tmp[1])) {
 		$debug = $tmp[1];
 	    } else {
+        $debug = "null";
 	    }
 	}
 	$i++;
