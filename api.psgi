@@ -1580,7 +1580,7 @@ sub diffcreate() {
 	}
 	$startedat = time();
 
-	$spell = "/usr/local/bin/sudo zfs send -vI ".$startsnapshot." ".$endsnapshot." > ".$diffpath.$startsnapshotescaped."-".$endsnapshotescaped.".diff &";  # TODO: 2>>".$logpath."
+	$spell = "/usr/local/bin/sudo zfs send -vI ".$startsnapshot." ".$endsnapshot." > ".$diffpath.$startsnapshotescaped."-".$endsnapshotescaped.".diff 2>>".$logpath." &";
 
 	uwsgi::spool({spell => $spell});
 
