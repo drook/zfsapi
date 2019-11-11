@@ -54,7 +54,7 @@ my $ctlconfpath = "/tmp/ctl.conf";
 my $sudopath = "/usr/local/bin/sudo";
 my $tmppath = "/tmp";
 my $loglocation = "/var/log/zfsreplica";
-my $diffpath = "/var/www/";
+my $diffpath = "/var/www/diff/";
 # debug: 0 - none, 1 - basic, 2 - extensive
 my $debug = 0;
 my %children;
@@ -1480,108 +1480,56 @@ sub diffcreate() {
     my $logpath;
     my $ug;
     my $uuid;
-    my $firstsnapexists = 0;
-    my $secondsnapexists = 0;
-    my $line;
-    my @tmp;
-    my $startsnapshotescaped;
     my $endsnapshotescaped;
     my $startedat;
     my $formattedspell;
+    my $exit_code;
 
     $startedat = time();
-    if (defined($startsnapshot) && defined($endsnapshot)) {
+    if (defined($endsnapshot)) {
     
 	$ug = Data::UUID -> new;
 	$uuid = $ug -> create_str();
 	$logpath = "/tmp/zfs-list-local.log.".$uuid;
 	
-	# make sure local snapshots exist
-	$spell = "zfs list -t snapshot | egrep -v 'NAME +USED' >".$logpath;
-	system($spell);
-	open(LOG, "<".$logpath);
-	if ($debug > 1) {
-		$psgiresult .= "<debug>\n";
-	}
-	while (!eof(LOG) && ($firstsnapexists == 0 || $secondsnapexists == 0)) {
-	    if ($debug > 1) {
-	        $psgiresult .= "<firstsnapexists>".$firstsnapexists."</firstsnapexists>\n";
-	        $psgiresult .= "<secondsnapexists>".$secondsnapexists."</secondsnapexists>\n";
-	    }
-	    $line = readline(LOG);
-	    chomp($line);
-	    @tmp = split(/[\s\t]+/, $line);
-	    if ($debug > 1) {
-		$psgiresult .= "<line>".$tmp[0]."</line>\n";
-	    }
-	    if ($tmp[0] eq $startsnapshot) {
-		if ($debug > 1) {
-		    $psgiresult .= "<startercondition>matched</startercondition>\n";
-		}
-		$firstsnapexists = 1;
-	    } else {
-		if ($debug > 1) {
-		    $psgiresult .= "<startercondition>not matched</startercondition>\n";
-		}
-		if ($debug > 1) {
-		    $psgiresult .= "<comparsion>".$tmp[0]." doesn't match the ".$startsnapshot."</comparsion>\n";
-		}
-		if ($tmp[0] eq $endsnapshot) {
-		    if ($debug > 1) {
-			$psgiresult .= "<endcondition>matched</endcondition>\n";
-		    }
-		    $secondsnapexists = 1;
-		} else {
-		    if ($debug > 1) {
-			$psgiresult .= "<endcondition>not matched</endcondition>\n";
-			$psgiresult .= "<comparsion>".$tmp[0]." doesn't match the ".$endsnapshot."</comparsion>\n";
-		    }
-		}
-	    }
-	}
-	close(LOG);
-	if ($debug == 0) {
-	    unlink($logpath);
-	}
-	if ($debug > 1) {
-	    $psgiresult .= "</debug>\n";
-	}
-
-	if ($debug > 0) {
-	    $psgiresult .= "<debug>\n";
-	    $psgiresult .= "<firstsnapexists>".$firstsnapexists."</firstsnapexists>\n";
-	    $psgiresult .= "<secondsnapexists>".$secondsnapexists."</secondsnapexists>\n";
-	    $psgiresult .= "</debug>\n";
-	}
-	# if they don't exist - then bail out
-	if ($firstsnapexists == 0 || $secondsnapexists == 0) {
-	    if ($firstsnapexists == 0) {
-		$errormessage = "start snapshot doesn't exist on local side.";
-	    } else {
-		$errormessage = "end snapshot doesn't exist on local side.";
-	    }
-	    return 1;
-	}
+	# make sure local snapshots exists
+    $spell = "zfs list -H -t snapshot -o name ".$endsnapshot;
+    $exit_code = system($spell);
+    if ($exit_code != 0) {
+        $errormessage = "end snapshot doesn't exist.";
+        return 1;
+    }
+    if (defined($startsnapshot)) {
+        $spell = "zfs list -H -t snapshot -o name ".$startsnapshot;
+        $exit_code = system($spell);
+        if ($exit_code != 0) {
+            $errormessage = "start snapshot doesn't exist.";
+            return 1;
+        }
+        if ((split '@', $startsnapshot)[0] ne (split '@', $endsnapshot)[0]) {
+            $errormessage = "start and end snapshots from different datasets.";
+            return 1;
+        }
+    }
 
 	# now create diff
-	$startsnapshotescaped = $startsnapshot;
-	$startsnapshotescaped =~ s/\//--/g;
 	$endsnapshotescaped = $endsnapshot;
 	$endsnapshotescaped =~ s/\//--/g;
-	$logpath = $loglocation."/zfs-diffcreate-".$startsnapshotescaped."-".$endsnapshotescaped.".log";
+    $logpath = $loglocation."/zfs-diffcreate-".$endsnapshotescaped.".log";
 	if ($debug > 0) {
 	    $psgiresult .= "<debug>\n";
-	    $psgiresult .= "<firstsnapexistsonremote>".$firstsnapexists."</firstsnapexistsonremote>\n";
-	    $psgiresult .= "<secondsnapexistsonremote>".$secondsnapexists."</secondsnapexistsonremote>\n";
-
 	    $psgiresult .= "<debug>okay to create the diff.</debug>\n";
 	    $psgiresult .= "<logpath>".$logpath."</logpath>\n";
 	    $psgiresult .= "</debug>\n";
 	}
 	$startedat = time();
 
-	$spell = "/usr/local/bin/sudo zfs send -vI ".$startsnapshot." ".$endsnapshot." > ".$diffpath.$startsnapshotescaped."-".$endsnapshotescaped.".diff 2>>".$logpath." &";
-
+    if (defined($startsnapshot)) {
+        $spell = "/usr/local/bin/sudo zfs send -vi ".$startsnapshot." ".$endsnapshot." > ".$diffpath.+(split '@', $endsnapshotescaped)[-1].".diff 2>>".$logpath." &";
+    } else {
+        $spell = "/usr/local/bin/sudo zfs send -v ".$endsnapshot." > ".$diffpath.+(split '@', $endsnapshotescaped)[-1].".diff 2>>".$logpath." &";
+    }
+    
 	uwsgi::spool({spell => $spell});
 
 	if ($debug > 0) {
@@ -1626,7 +1574,6 @@ $app = sub {
     $clonesourcefmt;
     $clonename = "null";
     $clonenamefmt;
-    $victim = "null";
     $victimfmt = "null";
     $snapshot = "null";
     $snapshotfmt = "null";
@@ -1642,6 +1589,11 @@ $app = sub {
     $vendorinfo = "null";
     $vendor = "null";
     $parselogresult = "null";
+    $startsnapshot = undef;
+    $endsnapshot = undef;
+    $remotedcip = undef;
+    $remotedataset = undef;
+    $debug = undef;
     undef(@logcontents);
 
     # creating or obtaining a semaphore for CTL locking
@@ -1732,118 +1684,118 @@ $app = sub {
             }
         }
         if ($request[$i] =~ "^clonename") {
-	    @tmp = split(/=/, $request[$i]);
-	    if (defined($tmp[1])) {
-		$clonename = $tmp[1];
-	    } else {
-	        $clonename = "null";
-	    }
-	}
-	if ($request[$i] =~ "targetname") {
-	    @tmp = split(/=/, $request[$i]);
-	    if (defined($tmp[1])) {
-		$targetname = $tmp[1];
-	    } else {
-		$targetname = "null";
-	    }
-	}
-	if ($request[$i] =~ "device") {
-	    @tmp = split(/=/, $request[$i]);
-	    if (defined($tmp[1])) {
-		$device = $tmp[1];
-	    } else {
-	        $device = "null";
-	    }
-	}
-	if ($request[$i] =~ "lun") {
-	    @tmp = split(/=/, $request[$i]);
-	    if (defined($tmp[1])) {
-		$lun = $tmp[1];
-	    }  else {
-		$lun = "null";
-	    }
-	}
-	if ($request[$i] =~ "remotedcip") {
-	    @tmp = split(/=/, $request[$i]);
-	    if (defined($tmp[1])) {
-	        $remotedcip = $tmp[1];
-	    } else {
-		$remotedcip = "null";
-	    }
-	}
-	if ($request[$i] =~ "remotedataset") {
-	    @tmp = split(/=/, $request[$i]);
-	    if (defined($tmp[1])) {
-		$remotedataset = $tmp[1];
-	    } else {
-	        $remotedataset = "null";
-	    }
-	}
-	if ($request[$i] =~ "startsnapshot") {
-	    @tmp = split(/=/, $request[$i]);
-	    if (defined($tmp[1])) {
-		$startsnapshot = $tmp[1];
-	    } else {
-		$startsnapshot = "null";
-	    }
-	}
-	if ($request[$i] =~ "endsnapshot") {
-	    @tmp = split(/=/, $request[$i]);
-	    if (defined($tmp[1])) {
-		$endsnapshot = $tmp[1];
-	    } else {
-	        $endsnapshot = "null";
-	    }
-	}
-	if ($request[$i] =~ "snapshot") {
-	    @tmp = split(/=/, $request[$i]);
-	    if (defined($tmp[1])) {
-		$snapshot = $tmp[1];
-	    } else {
-	        $snapshot = "null";
-	    }
-	}
-	if ($request[$i] =~ "deviceid") {
-	    @tmp = split(/=/, $request[$i]);
-	    if (defined($tmp[1])) {
-        	$deviceid = $tmp[1];
-	    } else {
-        	$deviceid = "null";
-	    }
-	}
-	if ($request[$i] =~ "scsiname") {
-	    @tmp = split(/=/, $request[$i]);
-	    if (defined($tmp[1])) {
-        	$scsiname = $tmp[1];
-	    } else {
-        	$scsiname = "null";
-	    }
-	}
-	if ($request[$i] =~ "lunid") {
-	    @tmp = split(/=/, $request[$i]);
-	    if (defined($tmp[1])) {
-        	$lunid = $tmp[1];
-	    } else {
-        	$lunid = "null";
-	    }
-	}
-	if ($request[$i] =~ "vendor") {
-	    @tmp = split(/=/, $request[$i]);
-	    if (defined($tmp[1])) {
-        	$vendor = $tmp[1];
-	    } else {
-        	$vendor = "null";
-	    }
-	}
-	if ($request[$i] =~ "debug") {
-	    @tmp = split(/=/, $request[$i]);
-	    if (defined($tmp[1])) {
-		$debug = $tmp[1];
-	    } else {
-        $debug = "null";
-	    }
-	}
-	$i++;
+            @tmp = split(/=/, $request[$i]);
+            if (defined($tmp[1])) {
+                $clonename = $tmp[1];
+            } else {
+                $clonename = "null";
+            }
+        }
+        if ($request[$i] =~ "targetname") {
+            @tmp = split(/=/, $request[$i]);
+            if (defined($tmp[1])) {
+                $targetname = $tmp[1];
+            } else {
+                $targetname = "null";
+            }
+        }
+        if ($request[$i] =~ "device") {
+            @tmp = split(/=/, $request[$i]);
+            if (defined($tmp[1])) {
+                $device = $tmp[1];
+            } else {
+                $device = "null";
+            }
+        }
+        if ($request[$i] =~ "lun") {
+            @tmp = split(/=/, $request[$i]);
+            if (defined($tmp[1])) {
+                $lun = $tmp[1];
+            }  else {
+                $lun = "null";
+            }
+        }
+        if ($request[$i] =~ "remotedcip") {
+            @tmp = split(/=/, $request[$i]);
+            if (defined($tmp[1])) {
+                $remotedcip = $tmp[1];
+            } else {
+                $remotedcip = "null";
+            }
+        }
+        if ($request[$i] =~ "remotedataset") {
+            @tmp = split(/=/, $request[$i]);
+            if (defined($tmp[1])) {
+                $remotedataset = $tmp[1];
+            } else {
+                $remotedataset = "null";
+            }
+        }
+        if ($request[$i] =~ "startsnapshot") {
+            @tmp = split(/=/, $request[$i]);
+            if (defined($tmp[1])) {
+                $startsnapshot = $tmp[1];
+            } else {
+                $startsnapshot = "null";
+            }
+        }
+        if ($request[$i] =~ "endsnapshot") {
+            @tmp = split(/=/, $request[$i]);
+            if (defined($tmp[1])) {
+                $endsnapshot = $tmp[1];
+            } else {
+                $endsnapshot = "null";
+            }
+        }
+        if ($request[$i] =~ "snapshot") {
+            @tmp = split(/=/, $request[$i]);
+            if (defined($tmp[1])) {
+                $snapshot = $tmp[1];
+            } else {
+                $snapshot = "null";
+            }
+        }
+        if ($request[$i] =~ "deviceid") {
+            @tmp = split(/=/, $request[$i]);
+            if (defined($tmp[1])) {
+                $deviceid = $tmp[1];
+            } else {
+                $deviceid = "null";
+            }
+        }
+        if ($request[$i] =~ "scsiname") {
+            @tmp = split(/=/, $request[$i]);
+            if (defined($tmp[1])) {
+                $scsiname = $tmp[1];
+            } else {
+                $scsiname = "null";
+            }
+        }
+        if ($request[$i] =~ "lunid") {
+            @tmp = split(/=/, $request[$i]);
+            if (defined($tmp[1])) {
+                $lunid = $tmp[1];
+            } else {
+                $lunid = "null";
+            }
+        }
+        if ($request[$i] =~ "vendor") {
+            @tmp = split(/=/, $request[$i]);
+            if (defined($tmp[1])) {
+                $vendor = $tmp[1];
+            } else {
+                $vendor = "null";
+            }
+        }
+        if ($request[$i] =~ "debug") {
+            @tmp = split(/=/, $request[$i]);
+            if (defined($tmp[1])) {
+                $debug = $tmp[1];
+            } else {
+                $debug = "null";
+            }
+        }
+        $i++;
     }
 
     getxmlhead();
