@@ -1489,14 +1489,14 @@ sub diffcreate() {
     if (defined($endsnapshot)) {
     
 	# make sure local snapshots exists
-    $spell = "zfs list -Ht snapshot ".$endsnapshot;
+    $spell = "zfs list -H -t snapshot -o name ".$endsnapshot;
     $exit_code = system($spell);
     if ($exit_code != 0) {
         $errormessage = "end snapshot doesn't exist.";
         return 1;
     }
     if (defined($startsnapshot)) {
-        $spell = "zfs list -Ht snapshot ".$startsnapshot;
+        $spell = "zfs list -H -t snapshot -o name ".$startsnapshot;
         $exit_code = system($spell);
         if ($exit_code != 0) {
             $errormessage = "start snapshot doesn't exist.";
