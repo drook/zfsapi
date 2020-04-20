@@ -55,6 +55,7 @@ my $sudopath = "/usr/local/bin/sudo";
 my $tmppath = "/tmp";
 my $loglocation = "/var/log/zfsreplica";
 my $diffpath = "/var/www/diff/";
+my $zvol = "/dev/zvol/";
 # debug: 0 - none, 1 - basic, 2 - extensive
 my $debug = 0;
 my %children;
@@ -296,6 +297,7 @@ sub formatspell {
 
     $spellfmt =~ s/\&/\&amp\;/g;
     $spellfmt =~ s/\>/\&gt\;/g;
+    $spellfmt =~ s/\</\&lt\;/g;
 
     return $spellfmt;
 }
@@ -1478,8 +1480,6 @@ sub targetcreate() {
 sub diffcreate() {
 
     my $logpath;
-    my $ug;
-    my $uuid;
     my $endsnapshotescaped;
     my $startedat;
     my $formattedspell;
@@ -1488,19 +1488,15 @@ sub diffcreate() {
     $startedat = time();
     if (defined($endsnapshot)) {
     
-	$ug = Data::UUID -> new;
-	$uuid = $ug -> create_str();
-	$logpath = "/tmp/zfs-list-local.log.".$uuid;
-	
 	# make sure local snapshots exists
-    $spell = "zfs list -H -t snapshot -o name ".$endsnapshot;
+    $spell = "zfs list -Ht snapshot ".$endsnapshot;
     $exit_code = system($spell);
     if ($exit_code != 0) {
         $errormessage = "end snapshot doesn't exist.";
         return 1;
     }
     if (defined($startsnapshot)) {
-        $spell = "zfs list -H -t snapshot -o name ".$startsnapshot;
+        $spell = "zfs list -Ht snapshot ".$startsnapshot;
         $exit_code = system($spell);
         if ($exit_code != 0) {
             $errormessage = "start snapshot doesn't exist.";
@@ -1535,7 +1531,7 @@ sub diffcreate() {
 	if ($debug > 0) {
 	    $formattedspell = $spell;
 	    $formattedspell =~ s/&/&amp;/g;
-	    $psgiresult .= "<debug>replication spell: ".$formattedspell."</debug>\n";
+	    $psgiresult .= "<debug>diffcreate spell: ".$formattedspell."</debug>\n";
 	}
 	if ($debug > 0) {
 	    $psgiresult .= "<debug>zfs send invocation took ".(time() - $startedat)." seconds</debug>\n";
@@ -1550,6 +1546,105 @@ sub diffcreate() {
 		}
 	return 1;
     }
+}
+
+sub makeerror {
+    ($errormessage) = @_[0];
+    return 0;
+}
+
+sub implsystem {
+    chomp($_[0] = `$_[1]`);
+    my $result = $?;
+
+    if ($debug > 0)
+    {
+        $psgiresult .= "<debug><comand>".formatspell($_[1])."</comand>\n";
+        $psgiresult .= "<result>".$result."</result>\n";
+        $psgiresult .= "<output>".formatspell($_[0])."</output></debug>\n";
+    }
+    return ($result == 0 or makeerror(formatspell($_[0])));
+}
+
+sub mysystem {
+    return implsystem($_[0], $_[1]." 2>&1");
+}
+
+sub mypopen {
+    implsystem(my $out, $_[0]);
+    return $out;
+}
+
+sub getsmartclone() {
+
+    !defined($clonesource) and return makeerror("clonesource not supplied.");
+    !defined($clonename) and return makeerror("clonename not supplied.");
+    !defined($deviceid) and return makeerror("deviceid not supplied.");
+
+    my $startedat = time();
+
+    mysystem(my $lastsnapshot, "zfs list -Ho name -t snapshot -r ".$clonesource) or return 0;
+    ($lastsnapshot eq "") and return makeerror("there is no any snapshot in ".$clonesource);
+
+    $lastsnapshot = (split /\n/, $lastsnapshot)[-1];
+    $psgiresult .= "<lastsnapshot>".$lastsnapshot."</lastsnapshot>\n";
+    
+    my $port = mypopen($sudopath." ctladm portlist -q | awk '\$NF ~ /:".$deviceid.",/ {print \$1}'");
+    ($port eq "") and return makeerror("there is no port like that: ".$deviceid);
+
+    my $info = mypopen($sudopath." ctladm portlist -qvp ".$port);
+    ($info eq "") and return makeerror("failed to get port information: ".$deviceid);
+
+    my ($target) = $info =~ /Target: (\S+)/;
+    my ($lun)    = $info =~ /LUN 0: (\d+)/;
+    ($target eq "" or $lun eq "") and return makeerror("failed to parse port information: ".$info);
+
+    $psgiresult .= "<target>".$target."</target>\n";
+    $psgiresult .= "<lun>".$lun."</lun>\n";
+
+    my $origin = "";
+    my $written = 0;
+    if (mysystem(my $res, "zfs get -Hpo value origin,written ".$clonename))
+    {
+        ($origin, $written) = split(/\n/, $res);
+        ($origin eq "-") and return makeerror($clonename." is not clone.");
+
+        $psgiresult .= "<origin>".$origin."</origin>\n";
+        $psgiresult .= "<written>".$written."</written>\n";
+    }
+
+    if ($written != 0 or $origin ne $lastsnapshot)
+    {
+        my $lun2 = mypopen($sudopath." ctladm devlist | awk '\$NF == \"".$deviceid."\" {print \$1}'");
+        if ($lun2 ne "")
+        {
+            if ($lun2 ne $lun)
+            {
+                $psgiresult .= "<warning>lun (".$lun.") ne lun2 (".$lun2.")</warning>\n";
+            }
+            my $connection = mypopen($sudopath." ctladm islist | awk '\$NF == \"".$target."\"'");
+            ($connection ne "") and return makeerror("there is an active iscsi session: ".$connection);
+
+            mysystem(my $res, $sudopath." ctladm remove -b block -l ".$lun) or return 0;
+        }
+
+        if ($origin ne "")
+        {
+            mysystem(my $res, $sudopath." zfs destroy -r ".$clonename) or return 0;
+        }
+        mysystem(my $res, $sudopath." zfs clone ".$lastsnapshot." ".$clonename) or return 0;
+        mysystem(my $res, $sudopath." zfs snapshot ".$clonename."\@0") or return 0;
+
+        mysystem(my $res, $sudopath." ctladm create -b block -o file=".$zvol.$clonename." -o vendor=FREE_TT -o ctld_name=".$target.",lun,0 -d ".$deviceid." -l ".$lun) or return 0;
+    }
+    else
+    {
+        $psgiresult .= "<actualclone>nothing to do</actualclone>\n";
+    }
+    if ($debug > 0) {
+        $psgiresult .= "<debug>getsmartclone tooks ".(time() - $startedat)." seconds</debug>\n";
+    }
+    return 1;
 }
 
 uwsgi::spooler(
@@ -1570,10 +1665,10 @@ $app = sub {
     $snapname = "null";
     $bookmarkname = "null";
     $victim = "null";
-    $clonesource = "null";
-    $clonesourcefmt;
-    $clonename = "null";
-    $clonenamefmt;
+    $clonesource = undef;
+    $clonesourcefmt = undef;
+    $clonename = undef;
+    $clonenamefmt = undef;
     $victimfmt = "null";
     $snapshot = "null";
     $snapshotfmt = "null";
@@ -2025,6 +2120,18 @@ $app = sub {
             $psgiresult .= "<endsnapshot>".$endsnapshot."</endsnapshot>\n";
             $result = diffcreate();
             if ($result == 0) {
+                $psgiresult .= "<status>success</status>\n";
+            } else {
+                $psgiresult .= "<status>error</status>\n";
+                $psgiresult .= "<errormessage>".$errormessage."</errormessage>\n";
+            }
+            last ACTION;
+        }
+        if (/^smartclone$/) {
+            $psgiresult .= "<clonesource>".$clonesource."</clonesource>\n";
+            $psgiresult .= "<clonename>".$clonename."</clonename>\n";
+            $psgiresult .= "<deviceid>".$deviceid."</deviceid>\n";
+            if (getsmartclone()) {
                 $psgiresult .= "<status>success</status>\n";
             } else {
                 $psgiresult .= "<status>error</status>\n";
