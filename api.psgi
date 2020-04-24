@@ -1572,7 +1572,7 @@ sub diffcreate() {
 
             if ($firstversion ne $startversion) {
                 $startedat = time();
-                $spell = "/usr/local/bin/sudo zfs send -v ".$startsnapshot." > ".$diffpath.$firstdiff.".diff_".$startversion." 2>>".$logpath." && mv ".$diffpath.$firstdiff.".diff_".$startversion." ".$diffpath.$firstdiff.".diff"." &";
+                $spell = "/usr/local/bin/sudo zfs send -v ".$startsnapshot." > ".$diffpath.$firstdiff."_".$startversion." 2>>".$logpath." && mv ".$diffpath.$firstdiff."_".$startversion." ".$diffpath.$firstdiff." &";
 
                 uwsgi::spool({spell => $spell});
 
