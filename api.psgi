@@ -72,6 +72,28 @@ my $juststarted = 1;
 my $requests = 0;
 #-----------------------------
 
+# compare only version
+# sample: drive_10_version_20.diff
+sub diff_comparsion {
+  my @parts_a = split("[_.]", $a);
+  my @parts_b = split("[_.]", $b);
+
+  if (scalar @parts_a != 5 or
+      scalar @parts_b != 5) {
+    return 0;
+  }
+  return @parts_a[3] > @parts_b[3];
+}
+
+# args:
+# 0 - path for search
+# 1 - drive number
+sub get_sorted_diffs {
+  my $spell = "ls $_[0] | grep -E \"drive_$_[1]_version_[0-9]+\.diff\"";
+  my @files = split("\n", `$spell`);
+  return sort diff_comparsion @files;
+}
+
 sub getxmlhead(){
     $psgiresult .= "<?xml version=\"1.0\"?>\n";
     $psgiresult .= "<response>\n";
@@ -1488,67 +1510,89 @@ sub diffcreate() {
     $startedat = time();
     if (defined($endsnapshot)) {
     
-	$ug = Data::UUID -> new;
-	$uuid = $ug -> create_str();
-	$logpath = "/tmp/zfs-list-local.log.".$uuid;
-	
-	# make sure local snapshots exists
-    $spell = "zfs list -H -t snapshot -o name ".$endsnapshot;
-    $exit_code = system($spell);
-    if ($exit_code != 0) {
-        $errormessage = "end snapshot doesn't exist.";
-        return 1;
-    }
-    if (defined($startsnapshot)) {
-        $spell = "zfs list -H -t snapshot -o name ".$startsnapshot;
+        $ug = Data::UUID -> new;
+        $uuid = $ug -> create_str();
+        $logpath = "/tmp/zfs-list-local.log.".$uuid;
+
+        # make sure local snapshots exists
+        $spell = "zfs list -H -t snapshot -o name ".$endsnapshot;
         $exit_code = system($spell);
         if ($exit_code != 0) {
-            $errormessage = "start snapshot doesn't exist.";
+            $errormessage = "end snapshot doesn't exist.";
             return 1;
         }
-        if ((split '@', $startsnapshot)[0] ne (split '@', $endsnapshot)[0]) {
-            $errormessage = "start and end snapshots from different datasets.";
-            return 1;
+        if (defined($startsnapshot)) {
+            $spell = "zfs list -H -t snapshot -o name ".$startsnapshot;
+            $exit_code = system($spell);
+            if ($exit_code != 0) {
+                $errormessage = "start snapshot doesn't exist.";
+                return 1;
+            }
+            if ((split '@', $startsnapshot)[0] ne (split '@', $endsnapshot)[0]) {
+                $errormessage = "start and end snapshots from different datasets.";
+                return 1;
+            }
         }
-    }
 
-	# now create diff
-	$endsnapshotescaped = $endsnapshot;
-	$endsnapshotescaped =~ s/\//--/g;
-    $logpath = $loglocation."/zfs-diffcreate-".$endsnapshotescaped.".log";
-	if ($debug > 0) {
-	    $psgiresult .= "<debug>\n";
-	    $psgiresult .= "<debug>okay to create the diff.</debug>\n";
-	    $psgiresult .= "<logpath>".$logpath."</logpath>\n";
-	    $psgiresult .= "</debug>\n";
-	}
-	$startedat = time();
+        # now create diff
+        $endsnapshotescaped = $endsnapshot;
+        $endsnapshotescaped =~ s/\//--/g;
+        $logpath = $loglocation."/zfs-diffcreate-".$endsnapshotescaped.".log";
+        if ($debug > 0) {
+            $psgiresult .= "<debug>\n";
+            $psgiresult .= "<debug>okay to create the diff.</debug>\n";
+            $psgiresult .= "<logpath>".$logpath."</logpath>\n";
+            $psgiresult .= "</debug>\n";
+        }
+        $startedat = time();
 
-    if (defined($startsnapshot)) {
-        $spell = "/usr/local/bin/sudo zfs send -vi ".$startsnapshot." ".$endsnapshot." > ".$diffpath.+(split '@', $endsnapshotescaped)[-1].".diff 2>>".$logpath." &";
-    } else {
-        $spell = "/usr/local/bin/sudo zfs send -v ".$endsnapshot." > ".$diffpath.+(split '@', $endsnapshotescaped)[-1].".diff 2>>".$logpath." &";
-    }
-    
-	uwsgi::spool({spell => $spell});
+        if (defined($startsnapshot)) {
+            $spell = "/usr/local/bin/sudo zfs send -vi ".$startsnapshot." ".$endsnapshot." > ".$diffpath.+(split '@', $endsnapshotescaped)[-1].".diff 2>>".$logpath." &";
+        } else {
+            $spell = "/usr/local/bin/sudo zfs send -v ".$endsnapshot." > ".$diffpath.+(split '@', $endsnapshotescaped)[-1].".diff 2>>".$logpath." &";
+        }
 
-	if ($debug > 0) {
-	    $formattedspell = $spell;
-	    $formattedspell =~ s/&/&amp;/g;
-	    $psgiresult .= "<debug>replication spell: ".$formattedspell."</debug>\n";
-	}
-	if ($debug > 0) {
-	    $psgiresult .= "<debug>zfs send invocation took ".(time() - $startedat)." seconds</debug>\n";
-	}
-	return 0;
-    
+        uwsgi::spool({spell => $spell});
+
+        if ($debug > 0) {
+            $formattedspell = $spell;
+            $formattedspell =~ s/&/&amp;/g;
+            $psgiresult .= "<debug>replication spell: ".$formattedspell."</debug>\n";
+            $psgiresult .= "<debug>zfs send invocation took ".(time() - $startedat)." seconds</debug>\n";
+        }
+
+        if (defined($startsnapshot)) {
+            my $startsnapshotescaped = $startsnapshot;
+            $startsnapshotescaped =~ s/\//--/g;
+            my $startdiff = (split "@", $startsnapshotescaped)[-1];
+            my @arr = (split "[_.]", $startdiff);
+            (my $drivenumber, my $startversion) = (@arr[1], @arr[3]);
+            my $firstdiff = (get_sorted_diffs($diffpath, $drivenumber))[0];
+            my $firstversion = (split "[_.]", $firstdiff)[3];
+
+            if ($firstversion ne $startversion) {
+                $startedat = time();
+                $spell = "/usr/local/bin/sudo zfs send -v ".$startsnapshot." > ".$diffpath.$firstdiff.".diff_".$startversion." 2>>".$logpath." && mv ".$diffpath.$firstdiff.".diff_".$startversion." ".$diffpath.$firstdiff.".diff"." &";
+
+                uwsgi::spool({spell => $spell});
+
+                if ($debug > 0) {
+                    $formattedspell = $spell;
+                    $formattedspell =~ s/&/&amp;/g;
+                    $psgiresult .= "<debug>replication spell: ".$formattedspell."</debug>\n";
+                    $psgiresult .= "<debug>zfs send invocation took ".(time() - $startedat)." seconds</debug>\n";
+                }
+            }
+        }
+        return 0;
+
     } else {
 		if (!defined($startsnapshot)) {
         	    $errormessage = "start snapshot not supplied.";
 		} else {
         	    $errormessage = "end snapshot not supplied.";
 		}
-	return 1;
+		return 1;
     }
 }
 
