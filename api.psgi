@@ -1542,7 +1542,8 @@ sub diffcreate() {
             my ($firstversion) = $firstdiff =~ /version_(\d+)/;
 
             if ($firstversion eq "" or $startversion eq "" or $drivenumber eq "") {
-                return makeerror("Failed to get drive or version: firstversion: ".$firstversion." startversion: ".$startversion." drivenumber: ".$drivenumber);
+                makeerror("Failed to get drive or version: firstversion: ".$firstversion." startversion: ".$startversion." drivenumber: ".$drivenumber);
+                return 1;
             }
 
             if ($firstversion ne $startversion) {
