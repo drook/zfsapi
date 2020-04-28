@@ -73,16 +73,11 @@ my $requests = 0;
 #-----------------------------
 
 # compare only version
-# sample: drive_10_version_20.diff
 sub diff_comparsion {
-  my @parts_a = split("[_.]", $a);
-  my @parts_b = split("[_.]", $b);
+  my ($version_a) = $a =~ /version_(\d+)/;
+  my ($version_b) = $b =~ /version_(\d+)/;
 
-  if (scalar @parts_a != 5 or
-      scalar @parts_b != 5) {
-    return 0;
-  }
-  return @parts_a[3] > @parts_b[3];
+  return $version_a > $version_b;
 }
 
 # args:
@@ -1503,11 +1498,9 @@ sub diffcreate() {
     my $ug;
     my $uuid;
     my $endsnapshotescaped;
-    my $startedat;
     my $formattedspell;
     my $exit_code;
 
-    $startedat = time();
     if (defined($endsnapshot)) {
     
         $ug = Data::UUID -> new;
@@ -1544,10 +1537,19 @@ sub diffcreate() {
             $psgiresult .= "<logpath>".$logpath."</logpath>\n";
             $psgiresult .= "</debug>\n";
         }
-        $startedat = time();
 
         if (defined($startsnapshot)) {
-            $spell = "/usr/local/bin/sudo zfs send -vi ".$startsnapshot." ".$endsnapshot." > ".$diffpath.+(split '@', $endsnapshotescaped)[-1].".diff 2>>".$logpath." &";
+            $spell = "/usr/local/bin/sudo zfs send -vi ".$startsnapshot." ".$endsnapshot." > ".$diffpath.+(split '@', $endsnapshotescaped)[-1].".diff 2>>".$logpath;
+
+            my $startdiff = (split "@", $startsnapshot)[-1];
+            (my $drivenumber, my $startversion) = $startdiff =~ /drive_(\d+)_version_(\d+)/;
+            my $firstdiff = (get_sorted_diffs($diffpath, $drivenumber))[0];
+            my ($firstversion) = $firstdiff =~ /version_(\d+)/;
+
+            if ($firstversion ne $startversion) {
+                $spell .= " && /usr/local/bin/sudo zfs send -v ".$startsnapshot." > ".$diffpath.$firstdiff."_".$startversion." 2>>".$logpath." && mv ".$diffpath.$firstdiff."_".$startversion." ".$diffpath.$firstdiff;
+            }
+            $spell .= " &";
         } else {
             $spell = "/usr/local/bin/sudo zfs send -v ".$endsnapshot." > ".$diffpath.+(split '@', $endsnapshotescaped)[-1].".diff 2>>".$logpath." &";
         }
@@ -1555,35 +1557,9 @@ sub diffcreate() {
         uwsgi::spool({spell => $spell});
 
         if ($debug > 0) {
-            $formattedspell = $spell;
-            $formattedspell =~ s/&/&amp;/g;
-            $psgiresult .= "<debug>replication spell: ".$formattedspell."</debug>\n";
-            $psgiresult .= "<debug>zfs send invocation took ".(time() - $startedat)." seconds</debug>\n";
+            $psgiresult .= "<debug>replication spell: ".formatspell($spell)."</debug>\n";
         }
 
-        if (defined($startsnapshot)) {
-            my $startsnapshotescaped = $startsnapshot;
-            $startsnapshotescaped =~ s/\//--/g;
-            my $startdiff = (split "@", $startsnapshotescaped)[-1];
-            my @arr = (split "[_.]", $startdiff);
-            (my $drivenumber, my $startversion) = (@arr[1], @arr[3]);
-            my $firstdiff = (get_sorted_diffs($diffpath, $drivenumber))[0];
-            my $firstversion = (split "[_.]", $firstdiff)[3];
-
-            if ($firstversion ne $startversion) {
-                $startedat = time();
-                $spell = "/usr/local/bin/sudo zfs send -v ".$startsnapshot." > ".$diffpath.$firstdiff."_".$startversion." 2>>".$logpath." && mv ".$diffpath.$firstdiff."_".$startversion." ".$diffpath.$firstdiff." &";
-
-                uwsgi::spool({spell => $spell});
-
-                if ($debug > 0) {
-                    $formattedspell = $spell;
-                    $formattedspell =~ s/&/&amp;/g;
-                    $psgiresult .= "<debug>replication spell: ".$formattedspell."</debug>\n";
-                    $psgiresult .= "<debug>zfs send invocation took ".(time() - $startedat)." seconds</debug>\n";
-                }
-            }
-        }
         return 0;
 
     } else {
