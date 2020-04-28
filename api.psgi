@@ -86,8 +86,7 @@ sub diff_comparsion {
 # 1 - drive number
 sub get_sorted_diffs {
   my $spell = "ls $_[0] | grep -E \"drive_$_[1]_version_[0-9]+\.diff\"";
-  my @files = split("\n", `$spell`);
-  return sort diff_comparsion @files;
+  return sort diff_comparsion `$spell`;
 }
 
 sub getxmlhead(){
@@ -1538,9 +1537,13 @@ sub diffcreate() {
             $spell = "/usr/local/bin/sudo zfs send -vi ".$startsnapshot." ".$endsnapshot." > ".$diffpath.+(split '@', $endsnapshotescaped)[-1].".diff 2>>".$logpath;
 
             my $startdiff = (split "@", $startsnapshot)[-1];
-            (my $drivenumber, my $startversion) = $startdiff =~ /drive_(\d+)_version_(\d+)/;
+            my ($drivenumber, $startversion) = $startdiff =~ /drive_(\d+)_version_(\d+)/;
             my $firstdiff = (get_sorted_diffs($diffpath, $drivenumber))[0];
             my ($firstversion) = $firstdiff =~ /version_(\d+)/;
+
+            if ($firstversion eq "" or $startversion eq "" or $drivenumber eq "") {
+                return makeerror("Failed to get drive or version: firstversion: ".$firstversion." startversion: ".$startversion." drivenumber: ".$drivenumber);
+            }
 
             if ($firstversion ne $startversion) {
                 $spell .= " && /usr/local/bin/sudo zfs send -v ".$startsnapshot." > ".$diffpath.$firstdiff."_".$startversion." 2>>".$logpath." && mv ".$diffpath.$firstdiff."_".$startversion." ".$diffpath.$firstdiff;
