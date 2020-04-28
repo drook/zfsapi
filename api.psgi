@@ -1536,8 +1536,7 @@ sub diffcreate() {
         if (defined($startsnapshot)) {
             $spell = "/usr/local/bin/sudo zfs send -vi ".$startsnapshot." ".$endsnapshot." > ".$diffpath.+(split '@', $endsnapshotescaped)[-1].".diff 2>>".$logpath;
 
-            my $startdiff = (split "@", $startsnapshot)[-1];
-            my ($drivenumber, $startversion) = $startdiff =~ /drive_(\d+)_version_(\d+)/;
+            my ($drivenumber, $startversion) = $startsnapshot =~ /drive_(\d+)_version_(\d+)/;
             my $firstdiff = (get_sorted_diffs($diffpath, $drivenumber))[0];
             my ($firstversion) = $firstdiff =~ /version_(\d+)/;
 
