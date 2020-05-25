@@ -8,7 +8,7 @@ use IPC::SysV qw(IPC_PRIVATE S_IRUSR S_IWUSR IPC_CREAT IPC_EXCL);
 use IPC::Semaphore;
 
 #-----------------------------
-my $version = "2.5.0";
+my $version = "2.5.1";
 my $i;
 my $action = "null";
 my $snapsource = "null";
@@ -1604,8 +1604,7 @@ sub getsmartclone() {
 
     my $origin = "";
     my $written = 0;
-    if (mysystem(my $res, "zfs get -Hpo value origin,written ".$clonename))
-    {
+    if (mysystem(my $res, "zfs get -Hpo value origin,written ".$clonename)) {
         ($origin, $written) = split(/\n/, $res);
         ($origin eq "-") and return makeerror($clonename." is not clone.");
 
@@ -1613,32 +1612,28 @@ sub getsmartclone() {
         $psgiresult .= "<written>".$written."</written>\n";
     }
 
-    if ($written != 0 or $origin ne $lastsnapshot)
-    {
+    if ($written != 0 or $origin ne $lastsnapshot) {
         my $lun2 = mypopen($sudopath." ctladm devlist | awk '\$NF == \"".$deviceid."\" {print \$1}'");
-        if ($lun2 ne "")
-        {
-            if ($lun2 ne $lun)
-            {
+        if ($lun2 ne "") {
+            if ($lun2 ne $lun) {
                 $psgiresult .= "<warning>lun (".$lun.") ne lun2 (".$lun2.")</warning>\n";
             }
             my $connection = mypopen($sudopath." ctladm islist | awk '\$NF == \"".$target."\"'");
             ($connection ne "") and return makeerror("there is an active iscsi session: ".$connection);
 
+            lockCtlOp();
             mysystem(my $res, $sudopath." ctladm remove -b block -l ".$lun) or return 0;
+            unlockCtlOp();
         }
 
-        if ($origin ne "")
-        {
+        if ($origin ne "") {
             mysystem(my $res, $sudopath." zfs destroy -r ".$clonename) or return 0;
         }
         mysystem(my $res, $sudopath." zfs clone ".$lastsnapshot." ".$clonename) or return 0;
         mysystem(my $res, $sudopath." zfs snapshot ".$clonename."\@0") or return 0;
 
         mysystem(my $res, $sudopath." ctladm create -b block -o file=".$zvol.$clonename." -o vendor=FREE_TT -o ctld_name=".$target.",lun,0 -d ".$deviceid." -l ".$lun) or return 0;
-    }
-    else
-    {
+    } else {
         $psgiresult .= "<actualclone>nothing to do</actualclone>\n";
     }
     if ($debug > 0) {
