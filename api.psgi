@@ -8,7 +8,7 @@ use IPC::SysV qw(IPC_PRIVATE S_IRUSR S_IWUSR IPC_CREAT IPC_EXCL);
 use IPC::Semaphore;
 
 #-----------------------------
-my $version = "2.5.1";
+my $version = "2.5.2";
 my $i;
 my $action = "null";
 my $snapsource = "null";
