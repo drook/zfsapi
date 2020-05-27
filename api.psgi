@@ -1632,7 +1632,9 @@ sub getsmartclone() {
         mysystem(my $res, $sudopath." zfs clone ".$lastsnapshot." ".$clonename) or return 0;
         mysystem(my $res, $sudopath." zfs snapshot ".$clonename."\@0") or return 0;
 
+        lockCtlOp();
         mysystem(my $res, $sudopath." ctladm create -b block -o file=".$zvol.$clonename." -o vendor=FREE_TT -o ctld_name=".$target.",lun,0 -d ".$deviceid." -l ".$lun) or return 0;
+        unlockCtlOp();
     } else {
         $psgiresult .= "<actualclone>nothing to do</actualclone>\n";
     }
