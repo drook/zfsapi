@@ -78,7 +78,7 @@ sub diff_comparsion {
   my ($version_a) = $a =~ /version_(\d+)/;
   my ($version_b) = $b =~ /version_(\d+)/;
 
-  return $version_a > $version_b;
+  return $version_a <=> $version_b;
 }
 
 # args:
