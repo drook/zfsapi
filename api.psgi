@@ -8,7 +8,7 @@ use IPC::SysV qw(IPC_PRIVATE S_IRUSR S_IWUSR IPC_CREAT IPC_EXCL);
 use IPC::Semaphore;
 
 #-----------------------------
-my $version = "2.5.2";
+my $version = "2.5.3";
 my $i;
 my $action = "null";
 my $snapsource = "null";
@@ -339,44 +339,43 @@ sub getrelease() {
 	if ($debug > 1) {
 	    $psgiresult .= "<debug>victim name defined and is not null.</debug>\n";
 	}
-        $ug = Data::UUID -> new;
-        $uuid = $ug -> create_str();
-        @temp = split('/',$victim);
-        $victimshortname = $temp[scalar(@temp) - 1];
+    $ug = Data::UUID -> new;
+    $uuid = $ug -> create_str();
+    @temp = split('/',$victim);
+    $victimshortname = $temp[scalar(@temp) - 1];
 	if ($debug > 1) {
 	    $psgiresult .= "<debug>victim short name: ".$victimshortname.".</debug>\n";
 	}
 
-        $ctladmlogpath = "/tmp/ctladm.log.".$uuid;
+    $ctladmlogpath = "/tmp/ctladm.log.".$uuid;
 	if ($debug > 1) {
 	    $psgiresult .= "<debug>ctladm log path: ".$ctladmlogpath.".</debug>\n";
 	}
-        $spell = $sudopath." /usr/sbin/ctladm devlist -v > ".$ctladmlogpath." 2>&1";
+    $spell = $sudopath." /usr/sbin/ctladm devlist -v > ".$ctladmlogpath." 2>&1";
 	if ($debug > 1) {
 	    $psgiresult .= "<debug>calling spell.</debug>\n";
 	}
-        lockCtlOp();
-        system($spell);
-        unlockCtlOp();
-        open(CTLADMLOG, "<", $ctladmlogpath) or return 1;
-        while (!eof(CTLADMLOG) && $devicefound == 0) {
-            $line = readline(*CTLADMLOG);
-            chomp($line);
+    lockCtlOp();
+    system($spell);
+    unlockCtlOp();
+    open(CTLADMLOG, "<", $ctladmlogpath) or return 1;
+    while (!eof(CTLADMLOG) && $devicefound == 0) {
+        $line = readline(*CTLADMLOG);
+        chomp($line);
 
-            if ($line =~ /^[\s\t]*\d+ block/) {
-                $line =~ s/^\s+//;
-                @temp = split(/\s+/, $line);
-                $blockdev = $temp[0];
-            } else {
-                if ($line =~ /^[\s\t]*file=/) {
-                    @temp = split(/=/, $line);
-                    $vdev = $temp[1];
-
+        if ($line =~ /^[\s\t]*\d+ block/) {
+            $line =~ s/^\s+//;
+            @temp = split(/\s+/, $line);
+            $blockdev = $temp[0];
+        } else {
+            if ($line =~ /^[\s\t]*file=/) {
+                @temp = split(/=/, $line);
+                $vdev = $temp[1];
                     if ($vdev eq '/dev/zvol/'.$victim ) {
                         # we found our victim
-			if ($debug > 1) {
-			    $psgiresult .= "<debug>found our victim using file backend path.</debug>\n";
-			}
+		                if ($debug > 1) {
+		                    $psgiresult .= "<debug>found our victim using file backend path.</debug>\n";
+		                }
                         $devicefound = 1;
                         @time = localtime(time());
                         $time[4]++;
@@ -1612,10 +1611,14 @@ sub getsmartclone() {
     $lastsnapshot = (split /\n/, $lastsnapshot)[-1];
     $psgiresult .= "<lastsnapshot>".$lastsnapshot."</lastsnapshot>\n";
     
+    lockCtlOp();
     my $port = mypopen($sudopath." ctladm portlist -q | awk '\$NF ~ /:".$deviceid.",/ {print \$1}'");
     ($port eq "") and return makeerror("there is no port like that: ".$deviceid);
+    unlockCtlOp();
 
+    lockCtlOp();
     my $info = mypopen($sudopath." ctladm portlist -qvp ".$port);
+    unlockCtlOp();
     ($info eq "") and return makeerror("failed to get port information: ".$deviceid);
 
     my ($target) = $info =~ /Target: (\S+)/;
@@ -1636,12 +1639,16 @@ sub getsmartclone() {
     }
 
     if ($written != 0 or $origin ne $lastsnapshot) {
+        lockCtlOp();
         my $lun2 = mypopen($sudopath." ctladm devlist | awk '\$NF == \"".$deviceid."\" {print \$1}'");
+        unlockCtlOp();
         if ($lun2 ne "") {
             if ($lun2 ne $lun) {
                 $psgiresult .= "<warning>lun (".$lun.") ne lun2 (".$lun2.")</warning>\n";
             }
+            lockCtlOp();
             my $connection = mypopen($sudopath." ctladm islist | awk '\$NF == \"".$target."\"'");
+            unlockCtlOp();
             ($connection ne "") and return makeerror("there is an active iscsi session: ".$connection);
 
             lockCtlOp();
